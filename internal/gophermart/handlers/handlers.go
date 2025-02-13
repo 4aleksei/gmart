@@ -1,0 +1,470 @@
+package handlers
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	//"github.com/4aleksei/gmart/internal/common/middleware/hmacsha256"
+	//"github.com/4aleksei/gmart/internal/gophermart/handlers/middleware/httphmacsha256"
+
+	"github.com/4aleksei/gmart/internal/gophermart/handlers/middleware/httpgzip"
+	"github.com/4aleksei/gmart/internal/gophermart/handlers/middleware/httplogs"
+	"github.com/4aleksei/gmart/internal/gophermart/service"
+
+	"github.com/4aleksei/gmart/internal/common/logger"
+	"github.com/4aleksei/gmart/internal/common/models"
+
+	"github.com/4aleksei/gmart/internal/gophermart/config"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/jwtauth/v5"
+	"go.uber.org/zap"
+
+	"github.com/golang-jwt/jwt/v4"
+)
+
+type (
+	HandlersServer struct {
+		//store *service.HandlerStore
+		cfg       *config.Config
+		Srv       *http.Server
+		l         *logger.ZapLogger
+		key       string
+		s         *service.HandleService
+		tokenAuth *jwtauth.JWTAuth
+	}
+)
+
+const (
+	textHTMLContent        string = "text/html"
+	applicationJSONContent string = "application/json"
+	textPlainContent       string = "text/plain"
+
+	textPlainContentCharset string = "text/plain; charset=utf-8"
+
+	defaultHTTPshutdown int = 10
+)
+
+func NewHTTPServer(cfg *config.Config, l *logger.ZapLogger, s *service.HandleService) *HandlersServer {
+
+	h := &HandlersServer{
+		cfg:       cfg,
+		key:       cfg.Key,
+		l:         l,
+		s:         s,
+		tokenAuth: jwtauth.New("HS256", []byte(cfg.Key), nil),
+	}
+
+	h.Srv = &http.Server{
+		Addr:              cfg.Address,
+		Handler:           h.newRouter(),
+		ReadHeaderTimeout: 2 * time.Second,
+	}
+
+	return h
+}
+
+func (h *HandlersServer) Start(ctx context.Context) error {
+	go func() {
+		h.l.Logger.Info("Starting server", zap.String("address", h.cfg.Address))
+		if err := h.Srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			h.l.Logger.Debug("HTTP server error: ", zap.Error(err))
+		}
+		h.l.Logger.Info("Stopped serving new connections.")
+	}()
+	return nil
+}
+
+func (h *HandlersServer) Stop(ctx context.Context) error {
+	h.l.Logger.Info("Server is shutting down...")
+	shutdownCtx, shutdownRelease := context.WithTimeout(context.Background(), time.Duration(defaultHTTPshutdown)*time.Second)
+	defer shutdownRelease()
+
+	if err := h.Srv.Shutdown(shutdownCtx); err != nil {
+		h.l.Logger.Error("HTTP shutdown error :", zap.Error(err))
+	} else {
+		h.l.Logger.Info("Server shutdown complete")
+	}
+	return nil
+}
+
+func (h *HandlersServer) withLogging(next http.Handler) http.Handler {
+	logFn := func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		responseData := httplogs.NewResponseData()
+		lw := httplogs.NewResponseWriter(responseData, w)
+
+		next.ServeHTTP(lw, r)
+		duration := time.Since(start)
+		h.l.Logger.Info("got incoming HTTP request",
+			zap.String("uri", r.RequestURI),
+			zap.String("method", r.Method),
+			zap.String("AcceptEnc", r.Header.Get("Accept-Encoding")),
+			zap.String("ContentEnc", r.Header.Get("Content-Encoding")),
+			zap.String("Accept", r.Header.Get("Accept")),
+			zap.String("ContentType", r.Header.Get("Content-Type")),
+			zap.Duration("duration", duration),
+			zap.Int("resp_status", responseData.GetStatus()),
+			zap.Int("resp_size", responseData.GetSize()))
+	}
+	return http.HandlerFunc(logFn)
+}
+
+func (h *HandlersServer) Serve() {
+	go func() {
+		if err := h.Srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			h.l.Logger.Debug("HTTP server error: ", zap.Error(err))
+		}
+		h.l.Logger.Info("Stopped serving new connections.")
+	}()
+}
+
+func (h *HandlersServer) gzipMiddleware(next http.Handler) http.Handler {
+	gzipfn := func(w http.ResponseWriter, r *http.Request) {
+		ow := w
+		acceptEncoding := r.Header.Get("Accept-Encoding")
+		supportsGzip := strings.Contains(acceptEncoding, "gzip")
+		if supportsGzip {
+			cw := httpgzip.NewCompressWriter(w)
+			ow = cw
+			defer cw.Close()
+		}
+		contentEncoding := r.Header.Get("Content-Encoding")
+		sendsGzip := strings.Contains(contentEncoding, "gzip")
+		if sendsGzip {
+			cr, err := httpgzip.NewCompressReader(r.Body)
+			if err != nil {
+				h.l.Logger.Debug("cannot decode gzip", zap.Error(err))
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			r.Body = cr
+			defer cr.Close()
+		}
+		next.ServeHTTP(ow, r)
+	}
+	return http.HandlerFunc(gzipfn)
+}
+
+/*func (h *HandlersServer) hmacsha256Middleware(next http.Handler) http.Handler {
+	hmacsha256fn := func(w http.ResponseWriter, r *http.Request) {
+		ow := httphmacsha256.NewWriter(w, []byte(h.cfg.Key))
+
+		r.Body = hmacsha256.NewReader(r.Body, []byte(h.cfg.Key))
+
+		next.ServeHTTP(ow, r)
+	}
+	return http.HandlerFunc(hmacsha256fn)
+}*/
+
+func (h *HandlersServer) newRouter() http.Handler {
+	mux := chi.NewRouter()
+	mux.Use(h.withLogging)
+	mux.Use(h.gzipMiddleware)
+	//if h.key != "" {
+	//	mux.Use(h.hmacsha256Middleware)
+	//}
+	mux.Group(func(r chi.Router) {
+
+		// Seek, verify and validate JWT tokens
+		r.Use(jwtauth.Verifier(h.tokenAuth))
+
+		// Handle valid / invalid tokens. In this example, we use
+		// the provided authenticator middleware, but you can write your
+		// own very easily, look at the Authenticator method in jwtauth.go
+		// and tweak it, its not scary.
+		r.Use(jwtauth.Authenticator(h.tokenAuth))
+		r.Use(middleware.Recoverer)
+
+		r.Post("/api/user/orders", h.mainPagePostOrder)
+		r.Get("/api/user/orders", h.mainPageGetOrders)
+
+		//	r.Get("/admin", func(w http.ResponseWriter, r *http.Request) {
+		//	_, claims, _ := jwtauth.FromContext(r.Context())
+		//	w.Write([]byte(fmt.Sprintf("protected area. hi %v", claims["user_id"])))
+		//})
+	})
+
+	mux.Group(func(r chi.Router) {
+
+		r.Use(middleware.Recoverer)
+		r.Get("/", h.mainPage)
+		r.Post("/api/user/register", h.mainPageRegister)
+		r.Post("/api/user/login", h.mainPageLogin)
+
+	})
+
+	/*	mux.Post("/update/", h.mainPageJSON)
+		mux.Post("/updates/", h.mainPageJSONs)
+		mux.Post("/update/{type}/{name}/{value}", h.mainPostPagePlain)
+		mux.Post("/update/{type}/", h.mainPageFoundErrors)
+		mux.Post("/*", h.mainPageError)
+		mux.Get("/value/{type}/{name}", h.mainPageGetPlain)
+		mux.Post("/value/", h.mainPageGetJSON)
+		mux.Get("/ping", h.mainPingDB)
+		mux.Get("/", h.mainPage)
+	*/
+
+	return mux
+}
+
+func (h *HandlersServer) mainPagePostOrder(res http.ResponseWriter, req *http.Request) {
+	if req.Header.Get("Content-Type") != textPlainContent {
+		http.Error(res, "Bad content type", http.StatusBadRequest)
+		return
+	}
+
+	jwt, claims, _ := jwtauth.FromContext(req.Context())
+	if jwt == nil || claims["sub"] == "" {
+		http.Error(res, "Unauthorized access!", http.StatusUnauthorized)
+		return
+	}
+
+	body, err := io.ReadAll(req.Body)
+
+	if err != nil {
+		h.l.Logger.Debug("Read body", zap.Error(err))
+		http.Error(res, "Error reading request body", http.StatusInternalServerError)
+		return
+	}
+
+	switch req.Header.Get("Accept") {
+	case textHTMLContent:
+		res.Header().Add("Content-Type", textHTMLContent)
+	case applicationJSONContent:
+		res.Header().Add("Content-Type", applicationJSONContent)
+	default:
+		res.Header().Add("Content-Type", textPlainContentCharset)
+	}
+
+	err = h.s.RegisterOrder(req.Context(), claims["sub"].(string), string(body))
+	if err != nil {
+		if errors.Is(err, service.ErrOrderAlreadyLoadedOtherUser) {
+			h.l.Logger.Debug("Order load other user: ", zap.Error(err))
+			res.WriteHeader(http.StatusConflict)
+		} else if errors.Is(err, service.ErrBadValue) {
+			h.l.Logger.Debug("order num error: ", zap.Error(err))
+			res.WriteHeader(http.StatusUnprocessableEntity)
+		} else if errors.Is(err, service.ErrOrderAlreadyLoaded) {
+			h.l.Logger.Debug("order already loaded: ", zap.Error(err))
+			res.WriteHeader(http.StatusOK)
+		} else {
+			h.l.Logger.Debug("Error registering order", zap.Error(err))
+			res.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
+	res.WriteHeader(http.StatusAccepted)
+}
+
+func (h *HandlersServer) mainPageGetOrders(res http.ResponseWriter, req *http.Request) {
+
+	jwt, claims, _ := jwtauth.FromContext(req.Context())
+	if jwt == nil || claims["sub"] == "" {
+		http.Error(res, "Unauthorized access!", http.StatusUnauthorized)
+		return
+	}
+	res.Header().Add("Content-Type", applicationJSONContent)
+
+	val, err := h.s.GetOrders(req.Context(), claims["sub"].(string))
+	if err != nil {
+
+		h.l.Logger.Debug("get orders", zap.Error(err))
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if len(val) == 0 {
+		h.l.Logger.Debug("no row for user orders")
+		res.WriteHeader(http.StatusNoContent)
+		return
+	}
+	//switch req.Header.Get("Accept") {
+	//case textHTMLContent:
+	//	res.Header().Add("Content-Type", textHTMLContent)
+	//case applicationJSONContent:
+
+	//default:
+	//	res.Header().Add("Content-Type", textPlainContentCharset)
+	//}
+
+	var buf bytes.Buffer
+	if errson := models.JSONSEncodeBytes(io.Writer(&buf), val); errson != nil {
+		h.l.Logger.Debug("error encoding response", zap.Error(errson))
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	res.WriteHeader(http.StatusOK)
+
+	if _, err := io.WriteString(res, buf.String()); err != nil {
+		h.l.Logger.Debug("error writing response", zap.Error(err))
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+}
+
+func (h *HandlersServer) createToken(usernameID, name string) (string, error) {
+	// Create a new JWT token with claims
+	claims := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub":  usernameID,                       // Subject (user identifier)
+		"name": name,                             // Subject name
+		"iss":  "gophermart",                     // Issuer
+		"exp":  time.Now().Add(time.Hour).Unix(), // Expiration time
+		"iat":  time.Now().Unix(),                // Issued at
+	})
+
+	tokenString, err := claims.SignedString([]byte(h.key))
+	if err != nil {
+		return "", err
+	}
+	return tokenString, nil
+}
+
+func (h *HandlersServer) mainPageRegister(res http.ResponseWriter, req *http.Request) {
+	if req.Header.Get("Content-Type") != applicationJSONContent {
+		http.Error(res, "Bad content type", http.StatusBadRequest)
+		return
+	}
+
+	var user models.UserRegistration
+	if err := user.FromJSON(req.Body); err != nil {
+		h.l.Logger.Debug("cannot decode request JSON body", zap.Error(err))
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	userid, err := h.s.RegisterUser(req.Context(), user)
+	if err != nil {
+		if errors.Is(err, service.ErrAuthenticationFailed) {
+			h.l.Logger.Debug("User already exists: ", zap.Error(err))
+			res.WriteHeader(http.StatusConflict)
+		} else if errors.Is(err, service.ErrBadPass) {
+			h.l.Logger.Debug("name or pass error: ", zap.Error(err))
+			res.WriteHeader(http.StatusBadRequest)
+		} else {
+			h.l.Logger.Debug("RegisterUser: ", zap.Error(err))
+			res.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
+
+	token, err := h.createToken(userid, user.Name)
+
+	if err != nil {
+		h.l.Logger.Error("Error creating token", zap.Error(err))
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	switch req.Header.Get("Accept") {
+	case textHTMLContent:
+		res.Header().Add("Content-Type", textHTMLContent)
+	case applicationJSONContent:
+		res.Header().Add("Content-Type", applicationJSONContent)
+	default:
+		res.Header().Add("Content-Type", textPlainContentCharset)
+	}
+
+	http.SetCookie(res, &http.Cookie{
+		HttpOnly: true,
+		Expires:  time.Now().Add(7 * 24 * time.Hour),
+		SameSite: http.SameSiteLaxMode,
+		// Uncomment below for HTTPS:
+		// Secure: true,
+		Name:  "jwt", // Must be named "jwt" or else the token cannot be searched for by jwtauth.Verifier.
+		Value: token,
+	})
+
+	res.WriteHeader(http.StatusOK)
+
+}
+
+func (h *HandlersServer) mainPageLogin(res http.ResponseWriter, req *http.Request) {
+	if req.Header.Get("Content-Type") != applicationJSONContent {
+		http.Error(res, "Bad content type", http.StatusBadRequest)
+		return
+	}
+
+	var user models.UserRegistration
+	if err := user.FromJSON(req.Body); err != nil {
+		h.l.Logger.Debug("cannot decode request JSON body", zap.Error(err))
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	userid, err := h.s.LoginUser(req.Context(), user)
+	if err != nil {
+		if errors.Is(err, service.ErrAuthenticationFailed) {
+			h.l.Logger.Debug("ErrAuthentication : ", zap.Error(err))
+			res.WriteHeader(http.StatusUnauthorized)
+		} else if errors.Is(err, service.ErrBadPass) {
+			h.l.Logger.Debug("name or pass error: ", zap.Error(err))
+			res.WriteHeader(http.StatusBadRequest)
+		} else {
+			h.l.Logger.Debug("LoginUser: ", zap.Error(err))
+			res.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
+
+	token, err := h.createToken(userid, user.Name)
+
+	if err != nil {
+		h.l.Logger.Error("Error creating token", zap.Error(err))
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	switch req.Header.Get("Accept") {
+	case textHTMLContent:
+		res.Header().Add("Content-Type", textHTMLContent)
+	case applicationJSONContent:
+		res.Header().Add("Content-Type", applicationJSONContent)
+	default:
+		res.Header().Add("Content-Type", textPlainContentCharset)
+	}
+
+	http.SetCookie(res, &http.Cookie{
+		HttpOnly: true,
+		Expires:  time.Now().Add(7 * 24 * time.Hour),
+		SameSite: http.SameSiteLaxMode,
+		// Uncomment below for HTTPS:
+		// Secure: true,
+		Name:  "jwt", // Must be named "jwt" or else the token cannot be searched for by jwtauth.Verifier.
+		Value: token,
+	})
+
+	res.WriteHeader(http.StatusOK)
+
+}
+
+func (h *HandlersServer) mainPage(res http.ResponseWriter, req *http.Request) {
+	if req.URL.String() == "" || req.URL.String() == "/" {
+
+		val := "Server Started"
+		switch req.Header.Get("Accept") {
+		case textHTMLContent:
+			res.Header().Add("Content-Type", textHTMLContent)
+		case applicationJSONContent:
+			res.Header().Add("Content-Type", applicationJSONContent)
+		default:
+			res.Header().Add("Content-Type", textPlainContentCharset)
+		}
+		res.WriteHeader(http.StatusOK)
+		if _, err := res.Write([]byte(val)); err != nil {
+			h.l.Logger.Debug("error writing response", zap.Error(err))
+			res.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	} else {
+		http.Error(res, "Bad request", http.StatusBadRequest)
+	}
+}
