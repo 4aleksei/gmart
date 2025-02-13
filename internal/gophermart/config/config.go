@@ -45,15 +45,15 @@ func GetConfig() *Config {
 	//	if envFilePath := os.Getenv("FILE_STORAGE_PATH"); envFilePath != "" {
 	//		cfg.FilePath = envFilePath
 	//	}
-	if envKey := os.Getenv("KEY"); cfg.Key == "" && envKey != "" {
+	if envKey := os.Getenv("KEY"); cfg.Key == keyDefault && envKey != "" {
 		cfg.Key = envKey
 	}
 
-	if envRunAddr := os.Getenv("RUN_ADDRESS"); cfg.Address == "" && envRunAddr != "" {
+	if envRunAddr := os.Getenv("RUN_ADDRESS"); cfg.Address == addressDefault && envRunAddr != "" {
 		cfg.Address = envRunAddr
 	}
 
-	if envdatabaseURI := os.Getenv("DATABASE_URI"); cfg.DatabaseURI == "" && envdatabaseURI != "" {
+	if envdatabaseURI := os.Getenv("DATABASE_URI"); cfg.DatabaseURI == databaseURIDefault && envdatabaseURI != "" {
 		cfg.DatabaseURI = envdatabaseURI
 	}
 
