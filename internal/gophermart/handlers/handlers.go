@@ -167,28 +167,21 @@ func (h *HandlersServer) newRouter() http.Handler {
 	mux := chi.NewRouter()
 	mux.Use(h.withLogging)
 	mux.Use(h.gzipMiddleware)
-	//if h.key != "" {
-	//	mux.Use(h.hmacsha256Middleware)
-	//}
+
 	mux.Group(func(r chi.Router) {
 
-		// Seek, verify and validate JWT tokens
 		r.Use(jwtauth.Verifier(h.tokenAuth))
 
-		// Handle valid / invalid tokens. In this example, we use
-		// the provided authenticator middleware, but you can write your
-		// own very easily, look at the Authenticator method in jwtauth.go
-		// and tweak it, its not scary.
 		r.Use(jwtauth.Authenticator(h.tokenAuth))
 		r.Use(middleware.Recoverer)
 
 		r.Post("/api/user/orders", h.mainPagePostOrder)
 		r.Get("/api/user/orders", h.mainPageGetOrders)
 
-		//	r.Get("/admin", func(w http.ResponseWriter, r *http.Request) {
-		//	_, claims, _ := jwtauth.FromContext(r.Context())
-		//	w.Write([]byte(fmt.Sprintf("protected area. hi %v", claims["user_id"])))
-		//})
+		r.Get("/api/user/withdrawls", h.mainPageGetWithdrawals)
+
+		r.Get("/api/user/balance", h.mainPageGetBalance)
+		r.Post("/api/user/balance/withdraw", h.mainPagePostWithdraw)
 	})
 
 	mux.Group(func(r chi.Router) {
@@ -199,19 +192,52 @@ func (h *HandlersServer) newRouter() http.Handler {
 		r.Post("/api/user/login", h.mainPageLogin)
 
 	})
-
-	/*	mux.Post("/update/", h.mainPageJSON)
-		mux.Post("/updates/", h.mainPageJSONs)
-		mux.Post("/update/{type}/{name}/{value}", h.mainPostPagePlain)
-		mux.Post("/update/{type}/", h.mainPageFoundErrors)
-		mux.Post("/*", h.mainPageError)
-		mux.Get("/value/{type}/{name}", h.mainPageGetPlain)
-		mux.Post("/value/", h.mainPageGetJSON)
-		mux.Get("/ping", h.mainPingDB)
-		mux.Get("/", h.mainPage)
-	*/
-
 	return mux
+}
+
+func (h *HandlersServer) mainPagePostWithdraw(res http.ResponseWriter, req *http.Request) {
+	if req.Header.Get("Content-Type") != applicationJSONContent {
+		http.Error(res, "Bad content type", http.StatusBadRequest)
+		return
+	}
+	jwt, claims, _ := jwtauth.FromContext(req.Context())
+	if jwt == nil || claims["sub"] == "" {
+		http.Error(res, "Unauthorized access!", http.StatusUnauthorized)
+		return
+	}
+
+	var withdraw models.Withdraw
+	if err := withdraw.FromJSON(req.Body); err != nil {
+		h.l.Logger.Debug("cannot decode request JSON body", zap.Error(err))
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err := h.s.PostWithdraw(req.Context(), claims["sub"].(string), withdraw)
+
+	if err != nil {
+		if errors.Is(err, service.ErrBadValue) {
+			h.l.Logger.Debug("order num error: ", zap.Error(err))
+			res.WriteHeader(http.StatusUnprocessableEntity)
+		} else if errors.Is(err, service.ErrBalanceNotEnough) {
+			h.l.Logger.Debug("Error balance not enough", zap.Error(err))
+			res.WriteHeader(http.StatusPaymentRequired)
+		} else {
+			h.l.Logger.Debug("Error registering withdraw", zap.Error(err))
+			res.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
+
+	switch req.Header.Get("Accept") {
+	case textHTMLContent:
+		res.Header().Add("Content-Type", textHTMLContent)
+	case applicationJSONContent:
+		res.Header().Add("Content-Type", applicationJSONContent)
+	default:
+		res.Header().Add("Content-Type", textPlainContentCharset)
+	}
+	res.WriteHeader(http.StatusOK)
 }
 
 func (h *HandlersServer) mainPagePostOrder(res http.ResponseWriter, req *http.Request) {
@@ -263,8 +289,77 @@ func (h *HandlersServer) mainPagePostOrder(res http.ResponseWriter, req *http.Re
 	res.WriteHeader(http.StatusAccepted)
 }
 
-func (h *HandlersServer) mainPageGetOrders(res http.ResponseWriter, req *http.Request) {
+func (h *HandlersServer) mainPageGetBalance(res http.ResponseWriter, req *http.Request) {
+	jwt, claims, _ := jwtauth.FromContext(req.Context())
+	if jwt == nil || claims["sub"] == "" {
+		http.Error(res, "Unauthorized access!", http.StatusUnauthorized)
+		return
+	}
 
+	res.Header().Add("Content-Type", applicationJSONContent)
+	val, err := h.s.GetBalance(req.Context(), claims["sub"].(string))
+	if err != nil {
+
+		h.l.Logger.Debug("get balance", zap.Error(err))
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var buf bytes.Buffer
+	if errson := models.JSONSEncodeBytes(io.Writer(&buf), val); errson != nil {
+		h.l.Logger.Debug("error encoding response", zap.Error(errson))
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	res.WriteHeader(http.StatusOK)
+
+	if _, err := io.WriteString(res, buf.String()); err != nil {
+		h.l.Logger.Debug("error writing response", zap.Error(err))
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *HandlersServer) mainPageGetWithdrawals(res http.ResponseWriter, req *http.Request) {
+	jwt, claims, _ := jwtauth.FromContext(req.Context())
+	if jwt == nil || claims["sub"] == "" {
+		http.Error(res, "Unauthorized access!", http.StatusUnauthorized)
+		return
+	}
+	res.Header().Add("Content-Type", applicationJSONContent)
+
+	val, err := h.s.GetWithdrawals(req.Context(), claims["sub"].(string))
+	if err != nil {
+
+		h.l.Logger.Debug("get withdrawals", zap.Error(err))
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if len(val) == 0 {
+		h.l.Logger.Debug("no row for user  withdrawals")
+		res.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	var buf bytes.Buffer
+	if errson := models.JSONSEncodeBytes(io.Writer(&buf), val); errson != nil {
+		h.l.Logger.Debug("error encoding response", zap.Error(errson))
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	res.WriteHeader(http.StatusOK)
+
+	if _, err := io.WriteString(res, buf.String()); err != nil {
+		h.l.Logger.Debug("error writing response", zap.Error(err))
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *HandlersServer) mainPageGetOrders(res http.ResponseWriter, req *http.Request) {
 	jwt, claims, _ := jwtauth.FromContext(req.Context())
 	if jwt == nil || claims["sub"] == "" {
 		http.Error(res, "Unauthorized access!", http.StatusUnauthorized)

@@ -16,10 +16,26 @@ type (
 	Order struct {
 		OrderID string    `json:"number"`
 		Status  string    `json:"status"`
-		Accrual int       `json:"accrual,omitempty"`
+		Accrual float64   `json:"accrual,omitempty"`
 		Time    time.Time `json:"uploaded_at"`
 	}
+
+	Balance struct {
+		Accrual   float64 `json:"current"`
+		Withdrawn uint32  `json:"withdrawn"`
+	}
+
+	Withdraw struct {
+		OrderID string    `json:"order"`
+		Sum     float64   `json:"sum"`
+		TimeC   time.Time `json:"processed_at,omitempty"`
+	}
 )
+
+func (val *Withdraw) FromJSON(body io.ReadCloser) error {
+	err := json.NewDecoder(body).Decode(val)
+	return err
+}
 
 func (val *UserRegistration) FromJSON(body io.ReadCloser) error {
 	err := json.NewDecoder(body).Decode(val)
@@ -30,7 +46,7 @@ func (val *UserRegistration) ToJSON(w io.Writer) error {
 	return err
 }
 
-func JSONSEncodeBytes(w io.Writer, val []Order) error {
+func JSONSEncodeBytes(w io.Writer, val any /*val []Order*/) error {
 	enc := json.NewEncoder(w)
 	err := enc.Encode(val)
 	return err

@@ -15,8 +15,13 @@ import (
 type ServiceStore interface {
 	AddUser(context.Context, store.User) (store.User, error)
 	GetUser(context.Context, store.User) (store.User, error)
+	GetBalance(context.Context, uint64) (store.Balance, error)
 	InsertOrder(context.Context, store.Order) error
+	InsertWithdraw(context.Context, store.Withdraw) error
 	GetOrders(context.Context, uint64) ([]store.Order, error)
+
+	GetWithdrawals(context.Context, uint64) ([]store.Withdraw, error)
+
 	GetOneOrder(context.Context, uint64) (store.Order, error)
 }
 
@@ -39,6 +44,8 @@ var (
 	ErrOrderAlreadyLoaded = errors.New("order Already Loaded")
 
 	ErrOrderAlreadyLoadedOtherUser = errors.New("error order already loaded other")
+
+	ErrBalanceNotEnough = errors.New("balance not enouth")
 )
 
 func NewService(s ServiceStore, cfg *config.Config) *HandleService {
@@ -93,6 +100,29 @@ func (s *HandleService) LoginUser(ctx context.Context, user models.UserRegistrat
 	return id, nil
 }
 
+func (s *HandleService) PostWithdraw(ctx context.Context, userIdStr string, withdraw models.Withdraw) error {
+	userId, err := strconv.ParseUint(userIdStr, 10, 64)
+	if err != nil {
+		return fmt.Errorf("failed %w : %w", ErrBadValueUser, err)
+	}
+
+	orderId, err := strconv.ParseUint(withdraw.OrderID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("failed %w : %w", ErrBadValue, err)
+	}
+	err = s.store.InsertWithdraw(ctx, store.Withdraw{OrderID: orderId, UserID: userId, Sum: withdraw.Sum})
+	if err != nil {
+
+		if errors.Is(err, pg.ErrBalanceNotEnough) {
+			return ErrBalanceNotEnough
+		}
+
+		//variants!!!
+		return err
+	}
+	return nil
+}
+
 func (s *HandleService) RegisterOrder(ctx context.Context, userIdStr, orderIdStr string) error {
 
 	orderId, err := strconv.ParseUint(orderIdStr, 10, 64)
@@ -135,4 +165,38 @@ func (s *HandleService) GetOrders(ctx context.Context, userIdStr string) ([]mode
 		valsret[i] = models.Order{OrderID: strconv.FormatUint(v.OrderID, 10), Status: v.Status, Accrual: v.Accrual, Time: v.TimeU}
 	}
 	return valsret, nil
+}
+
+func (s *HandleService) GetWithdrawals(ctx context.Context, userIdStr string) ([]models.Withdraw, error) {
+	userId, err := strconv.ParseUint(userIdStr, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed %w : %w", ErrBadValue, err)
+	}
+	vals, err := s.store.GetWithdrawals(ctx, userId)
+	if err != nil {
+		return nil, err
+	}
+	valsret := make([]models.Withdraw, len(vals))
+	for i, v := range vals {
+		valsret[i] = models.Withdraw{OrderID: strconv.FormatUint(v.OrderID, 10), Sum: v.Sum, TimeC: v.TimeC}
+	}
+	return valsret, nil
+}
+
+func (s *HandleService) GetBalance(ctx context.Context, userIdStr string) (models.Balance, error) {
+	userId, err := strconv.ParseUint(userIdStr, 10, 64)
+	var valRet models.Balance
+	if err != nil {
+		return valRet, fmt.Errorf("failed %w : %w", ErrBadValue, err)
+	}
+	val, err := s.store.GetBalance(ctx, userId)
+	if err != nil {
+		if errors.Is(err, pg.ErrRowNotFound) {
+			return valRet, nil
+		}
+		return valRet, err
+	}
+	valRet.Accrual = val.Accrual
+	valRet.Withdrawn = val.Withdrawn
+	return valRet, err
 }

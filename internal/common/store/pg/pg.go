@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	//"fmt"
 	"time"
@@ -24,8 +25,9 @@ type (
 )
 
 var (
-	ErrAlreadyExists = errors.New("already exists")
-	ErrRowNotFound   = errors.New("not found")
+	ErrAlreadyExists    = errors.New("already exists")
+	ErrRowNotFound      = errors.New("not found")
+	ErrBalanceNotEnough = errors.New("balance not enough")
 )
 
 func New() *PgStore {
@@ -43,7 +45,25 @@ func ProbePGConnection(err error) bool {
 func ProbePGDublicate(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		return pgerrcode.IsIntegrityConstraintViolation(pgErr.Code)
+		return pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) && pgErr.Code == "23505"
+	}
+	return false
+}
+
+func ProbePGErrorConstrain(err error) bool {
+	var pgErr *pgconn.PgError
+
+	if errors.As(err, &pgErr) {
+		fmt.Println(err)
+		return pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) && pgErr.Code == "23514"
+	}
+	return false
+}
+
+func ProbePGNoRows(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgerrcode.IsNoData(pgErr.Code)
 	}
 	return false
 }
@@ -95,11 +115,87 @@ const (
 
 	selectOneOrderDefault = `SELECT  order_id, user_id , status ,accrual , uploaded_at, changed_at  FROM orders WHERE order_id = $1`
 
+	selectBalanceDefault = `SELECT user_id , current ,withdrawn, changed_at  FROM balances WHERE user_id = $1`
+
+	selectWithdrawalsDefault = `SELECT  user_id , order_id,  sum , processed_at FROM withdrawals WHERE user_id = $1`
+
+	queryInsertWithdrawDefault = `INSERT INTO withdrawals ( user_id, order_id ,sum , processed_at)
+	       VALUES ($1,$2, $3 ,now()) RETURNING user_id, order_id ,sum , processed_at`
+
+	queryBalanceDecDefault = `INSERT INTO balances (user_id , current ,withdrawn, changed_at) VALUES ($1,$2,$3,now())
+		    ON CONFLICT (user_id) 
+		DO UPDATE SET current=balances.current-excluded.current, withdrawn=balances.withdrawn+excluded.withdrawn  , changed_at = now() 
+		RETURNING user_id , current ,withdrawn, changed_at`
+
+	queryBalanceIncDefault = `INSERT INTO balances (user_id , current ,withdrawn, changed_at) VALUES ($1,$2,$3,now())
+		ON CONFLICT (user_id) 
+	DO UPDATE SET current=balances.current+excluded.current , changed_at = now() 
+	RETURNING user_id , current ,withdrawn, changed_at`
+
+	queryCOrderDefault = `UPDATE orders SET status = $2  , accrual = $3 , changed_at = now() WHERE order_id = $1
+			   RETURNING order_id, user_id , status ,accrual`
+
 	//onConflictStatementDelta = ` ON CONFLICT (name, kind)
 	//	DO UPDATE SET delta=metrics.delta+excluded.delta,  updated_at = now() RETURNING name, kind, delta, value`
 	//onConflictStatementValue = ` ON CONFLICT (name, kind)
 	//	DO UPDATE SET  value=excluded.value , updated_at = now() RETURNING name, kind, delta, value`
 )
+
+func (s *PgStore) InsertWithdraw(ctx context.Context, w store.Withdraw) error {
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection: %w", err)
+	}
+	defer conn.Release()
+
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("error begin tx: %w", err)
+	}
+
+	defer func() {
+		defer func() { _ = tx.Rollback(ctx) }()
+	}()
+
+	row := tx.QueryRow(ctx, selectBalanceDefault, w.UserID)
+	var o store.Balance
+	if row != nil {
+		row.Scan(&o.UserID, &o.Accrual, &o.Withdrawn, &o.TimeC)
+	}
+	if o.Accrual < w.Sum {
+		return ErrBalanceNotEnough
+	}
+
+	row = tx.QueryRow(ctx, queryBalanceDecDefault, w.UserID, w.Sum, 1)
+	if row != nil {
+		var u store.Balance
+		err := row.Scan(&u.UserID, &u.Accrual, &u.Withdrawn, &u.TimeC)
+		if err != nil {
+			if ProbePGDublicate(err) {
+				return ErrAlreadyExists
+			}
+			return err
+		}
+	} else {
+		return ErrRowNotFound
+	}
+
+	rowW := tx.QueryRow(ctx, queryInsertWithdrawDefault, w.UserID, w.OrderID, w.Sum)
+	if rowW != nil {
+		var u store.Withdraw
+		err := rowW.Scan(&u.UserID, &u.OrderID, &u.Sum, &u.TimeC)
+		if err != nil {
+			if ProbePGDublicate(err) {
+				return ErrAlreadyExists
+			}
+			return err
+		}
+	} else {
+		return ErrRowNotFound
+	}
+
+	return tx.Commit(ctx)
+}
 
 func (s *PgStore) InsertOrder(ctx context.Context, o store.Order) error {
 	row := s.pool.QueryRow(ctx, queryROrderDefault, o.OrderID, o.UserID, o.Status, o.Accrual)
@@ -113,7 +209,7 @@ func (s *PgStore) InsertOrder(ctx context.Context, o store.Order) error {
 			return err
 		}
 	} else {
-		return sql.ErrNoRows
+		return ErrRowNotFound
 	}
 	return nil
 }
@@ -130,6 +226,45 @@ func (s *PgStore) GetOneOrder(ctx context.Context, id uint64) (store.Order, erro
 		return o, ErrRowNotFound
 	}
 	return o, nil
+}
+
+func (s *PgStore) GetBalance(ctx context.Context, id uint64) (store.Balance, error) {
+	row := s.pool.QueryRow(ctx, selectBalanceDefault, id)
+	var o store.Balance
+	if row != nil {
+		err := row.Scan(&o.UserID, &o.Accrual, &o.Withdrawn, &o.TimeC)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return o, ErrRowNotFound
+			}
+			return o, err
+		}
+	} else {
+		return o, ErrRowNotFound
+	}
+	return o, nil
+}
+
+func (s *PgStore) GetWithdrawals(ctx context.Context, id uint64) ([]store.Withdraw, error) {
+	rows, err := s.pool.Query(ctx, selectWithdrawalsDefault, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	withs := make([]store.Withdraw, 0, 10)
+	for rows.Next() {
+		var o store.Withdraw
+		err := rows.Scan(&o.UserID, &o.OrderID, &o.Sum, &o.TimeC)
+		if err != nil {
+			return nil, err
+		}
+		withs = append(withs, o)
+	}
+	err = rows.Err()
+	if err != nil {
+		return nil, err
+	}
+	return withs, nil
 }
 
 func (s *PgStore) GetOrders(ctx context.Context, id uint64) ([]store.Order, error) {

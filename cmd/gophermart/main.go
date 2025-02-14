@@ -8,6 +8,7 @@ import (
 
 	"github.com/4aleksei/gmart/internal/common/store/pg"
 	"github.com/4aleksei/gmart/internal/common/utils"
+	"github.com/4aleksei/gmart/internal/gophermart/accrual"
 	"github.com/4aleksei/gmart/internal/gophermart/config"
 	"github.com/4aleksei/gmart/internal/gophermart/handlers"
 	"github.com/4aleksei/gmart/internal/gophermart/service"
@@ -32,7 +33,7 @@ func setupFX() *fx.App {
 
 			service.NewService,
 			handlers.NewHTTPServer,
-
+			accrual.NewAccrual,
 			/*fx.Annotate(memstoragemux.NewStoreMux,
 				fx.As(new(service.AgentMetricsStorage))),
 			service.NewHandlerStore,
@@ -52,6 +53,7 @@ func setupFX() *fx.App {
 
 			registerStorePg,
 
+			registerAccrualClient,
 			registerHTTPServer,
 		),
 	)
@@ -71,6 +73,10 @@ func registerStorePg(ss store.Store, cfg *config.Config, lc fx.Lifecycle) {
 		lc.Append(utils.ToHook(v))
 	default:
 	}
+}
+
+func registerAccrualClient(hh *accrual.HandlersAccrual, lc fx.Lifecycle) {
+	lc.Append(utils.ToHook(hh))
 }
 
 func registerHTTPServer(hh *handlers.HandlersServer, lc fx.Lifecycle) {
