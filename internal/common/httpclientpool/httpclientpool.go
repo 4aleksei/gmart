@@ -110,16 +110,19 @@ func workerPlain(ctx context.Context, wg *sync.WaitGroup, client *http.Client,
 			if err != nil && errors.Is(err, context.Canceled) {
 				return
 			}
-			var res = job.Result{
-				Value:   j.Value,
-				Result:  resClient.status,
-				WaitSec: resClient.waitTime,
-				Err:     err,
-				ID:      j.ID,
-			}
-			res.Value.Accrual = resClient.value.Accrual
-			res.Value.Status = resClient.value.Status
 
+			var res = job.Result{
+				Value: j.Value,
+				Err:   err,
+				ID:    j.ID,
+			}
+
+			if resClient != nil {
+				res.Result = resClient.status
+				res.WaitSec = resClient.waitTime
+				res.Value.Accrual = resClient.value.Accrual
+				res.Value.Status = resClient.value.Status
+			}
 			results <- res
 		}
 	}
