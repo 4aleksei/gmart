@@ -10,6 +10,7 @@ import (
 	"github.com/4aleksei/gmart/internal/common/models"
 	"github.com/4aleksei/gmart/internal/common/store"
 	"github.com/4aleksei/gmart/internal/common/store/pg"
+	"github.com/4aleksei/gmart/internal/common/utils"
 	"github.com/4aleksei/gmart/internal/gophermart/config"
 
 	"github.com/4aleksei/gmart/internal/common/httpclientpool"
@@ -111,16 +112,20 @@ func (s *HandleService) LoginUser(ctx context.Context, user models.UserRegistrat
 }
 
 func (s *HandleService) PostWithdraw(ctx context.Context, userIdStr string, withdraw models.Withdraw) error {
-	userId, err := strconv.ParseUint(userIdStr, 10, 64)
+	userID, err := strconv.ParseUint(userIdStr, 10, 64)
 	if err != nil {
 		return fmt.Errorf("failed %w : %w", ErrBadValueUser, err)
 	}
 
-	orderId, err := strconv.ParseUint(withdraw.OrderID, 10, 64)
+	orderID, err := strconv.ParseUint(withdraw.OrderID, 10, 64)
 	if err != nil {
 		return fmt.Errorf("failed %w : %w", ErrBadValue, err)
 	}
-	err = s.store.InsertWithdraw(ctx, store.Withdraw{OrderID: orderId, UserID: userId, Sum: withdraw.Sum})
+	if utils.ValidLuhn(orderID) {
+		return fmt.Errorf("failed %w : %w", ErrBadValue, err)
+	}
+
+	err = s.store.InsertWithdraw(ctx, store.Withdraw{OrderID: orderID, UserID: userID, Sum: withdraw.Sum})
 	if err != nil {
 
 		if errors.Is(err, pg.ErrBalanceNotEnough) {
@@ -135,23 +140,27 @@ func (s *HandleService) PostWithdraw(ctx context.Context, userIdStr string, with
 
 func (s *HandleService) RegisterOrder(ctx context.Context, userIdStr, orderIdStr string) error {
 
-	orderId, err := strconv.ParseUint(orderIdStr, 10, 64)
+	orderID, err := strconv.ParseUint(orderIdStr, 10, 64)
 	if err != nil {
 		return fmt.Errorf("failed %w : %w", ErrBadValue, err)
 	}
-	userId, err := strconv.ParseUint(userIdStr, 10, 64)
+	if utils.ValidLuhn(orderID) {
+		return fmt.Errorf("failed %w : %w", ErrBadValue, err)
+	}
+
+	userID, err := strconv.ParseUint(userIdStr, 10, 64)
 	if err != nil {
 		return fmt.Errorf("failed %w : %w", ErrBadValueUser, err)
 	}
 
-	err = s.store.InsertOrder(ctx, store.Order{OrderID: orderId, UserID: userId, Status: "NEW", Accrual: 0})
+	err = s.store.InsertOrder(ctx, store.Order{OrderID: orderID, UserID: userID, Status: "NEW", Accrual: 0})
 	if err != nil {
 		if errors.Is(err, pg.ErrAlreadyExists) {
-			one, err := s.store.GetOneOrder(ctx, orderId)
+			one, err := s.store.GetOneOrder(ctx, orderID)
 			if err != nil {
 				return err
 			}
-			if one.UserID != userId {
+			if one.UserID != userID {
 				return ErrOrderAlreadyLoadedOtherUser
 			}
 			return ErrOrderAlreadyLoaded
@@ -162,11 +171,11 @@ func (s *HandleService) RegisterOrder(ctx context.Context, userIdStr, orderIdStr
 }
 
 func (s *HandleService) GetOrders(ctx context.Context, userIdStr string) ([]models.Order, error) {
-	userId, err := strconv.ParseUint(userIdStr, 10, 64)
+	userID, err := strconv.ParseUint(userIdStr, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("failed %w : %w", ErrBadValue, err)
 	}
-	vals, err := s.store.GetOrders(ctx, userId)
+	vals, err := s.store.GetOrders(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -178,11 +187,11 @@ func (s *HandleService) GetOrders(ctx context.Context, userIdStr string) ([]mode
 }
 
 func (s *HandleService) GetWithdrawals(ctx context.Context, userIdStr string) ([]models.Withdraw, error) {
-	userId, err := strconv.ParseUint(userIdStr, 10, 64)
+	userID, err := strconv.ParseUint(userIdStr, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("failed %w : %w", ErrBadValue, err)
 	}
-	vals, err := s.store.GetWithdrawals(ctx, userId)
+	vals, err := s.store.GetWithdrawals(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -194,12 +203,12 @@ func (s *HandleService) GetWithdrawals(ctx context.Context, userIdStr string) ([
 }
 
 func (s *HandleService) GetBalance(ctx context.Context, userIdStr string) (models.Balance, error) {
-	userId, err := strconv.ParseUint(userIdStr, 10, 64)
+	userID, err := strconv.ParseUint(userIdStr, 10, 64)
 	var valRet models.Balance
 	if err != nil {
 		return valRet, fmt.Errorf("failed %w : %w", ErrBadValue, err)
 	}
-	val, err := s.store.GetBalance(ctx, userId)
+	val, err := s.store.GetBalance(ctx, userID)
 	if err != nil {
 		if errors.Is(err, pg.ErrRowNotFound) {
 			return valRet, nil
