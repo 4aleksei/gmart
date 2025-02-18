@@ -9,6 +9,7 @@ import (
 	//"fmt"
 	"time"
 
+	"github.com/4aleksei/gmart/internal/common/logger"
 	"github.com/4aleksei/gmart/internal/common/store"
 	"github.com/4aleksei/gmart/internal/common/utils"
 	"github.com/jackc/pgerrcode"
@@ -16,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"go.uber.org/zap"
 )
 
 type (
@@ -23,6 +25,7 @@ type (
 		pool        *pgxpool.Pool
 		DatabaseURI string
 		limitbatch  int
+		l           *logger.ZapLogger
 	}
 )
 
@@ -32,8 +35,8 @@ var (
 	ErrBalanceNotEnough = errors.New("balance not enough")
 )
 
-func New() *PgStore {
-	return &PgStore{}
+func New(l *logger.ZapLogger) *PgStore {
+	return &PgStore{l: l}
 }
 
 func ProbePGConnection(err error) bool {
@@ -166,6 +169,8 @@ func (s *PgStore) InsertWithdraw(ctx context.Context, w store.Withdraw) error {
 	if row != nil {
 		row.Scan(&o.UserID, &o.Accrual, &o.Withdrawn, &o.TimeC)
 	}
+	s.l.Logger.Debug("select ", zap.Any("balance", o))
+
 	if o.Accrual < w.Sum {
 		return ErrBalanceNotEnough
 	}
@@ -180,6 +185,7 @@ func (s *PgStore) InsertWithdraw(ctx context.Context, w store.Withdraw) error {
 			}
 			return err
 		}
+		s.l.Logger.Debug("insert", zap.Any("new balance", u))
 	} else {
 		return ErrRowNotFound
 	}
@@ -194,10 +200,10 @@ func (s *PgStore) InsertWithdraw(ctx context.Context, w store.Withdraw) error {
 			}
 			return err
 		}
+		s.l.Logger.Debug("insert ", zap.Any("withdraw", u))
 	} else {
 		return ErrRowNotFound
 	}
-
 	return tx.Commit(ctx)
 }
 
