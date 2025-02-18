@@ -102,7 +102,7 @@ func newClient() *http.Client {
 func workerPlain(ctx context.Context, wg *sync.WaitGroup, client *http.Client,
 	jobs <-chan job.Job, results chan<- job.Result, cfg *Config, l *logger.ZapLogger) {
 	defer wg.Done()
-	server := "http://" + cfg.Address + "/api/orders/"
+	server := cfg.Address + "/api/orders/"
 	for j := range jobs {
 		select {
 		case <-ctx.Done():
