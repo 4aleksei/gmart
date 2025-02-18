@@ -178,7 +178,7 @@ func (h *HandlersServer) newRouter() http.Handler {
 		r.Post("/api/user/orders", h.mainPagePostOrder)
 		r.Get("/api/user/orders", h.mainPageGetOrders)
 
-		r.Get("/api/user/withdrawls", h.mainPageGetWithdrawals)
+		r.Get("/api/user/withdrawals", h.mainPageGetWithdrawals)
 
 		r.Get("/api/user/balance", h.mainPageGetBalance)
 		r.Post("/api/user/balance/withdraw", h.mainPagePostWithdraw)
