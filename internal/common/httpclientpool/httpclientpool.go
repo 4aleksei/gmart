@@ -17,7 +17,6 @@ import (
 
 	"github.com/4aleksei/gmart/internal/common/models"
 	"go.uber.org/zap"
-	//"github.com/4aleksei/gmart/internal/common/utils"
 )
 
 const (
@@ -25,6 +24,11 @@ const (
 	textPlainContent       string = "text/plain"
 	applicationJSONContent string = "application/json"
 	gzipContent            string = "gzip"
+)
+
+const (
+	HTTPRetryCode   int = 429
+	HTTPSuccessCode int = 200
 )
 
 var (
@@ -132,21 +136,19 @@ func workerPlain(ctx context.Context, wg *sync.WaitGroup, client *http.Client,
 }
 
 func (p *PoolHandler) StartPool(ctx context.Context, jobs chan job.Job, results chan job.Result, wg *sync.WaitGroup) {
-	for i := 0; i < int(p.WorkerCount); i++ {
+	for i := 0; i < p.WorkerCount; i++ {
 		wg.Add(1)
 		go p.clients[i].execFn(ctx, wg, p.clients[i].client, jobs, results, &p.cfg, p.l)
 	}
 }
 
 func plainTxtFunc(ctx context.Context, client *http.Client, server, data string, l *logger.ZapLogger) (*resulAccrual, error) {
-
 	res, err := newPGetReq(ctx, client, server+data, http.NoBody, l)
-
 	return res, err
 }
 
-func newPGetReq(ctx context.Context, client *http.Client, server string, requestBody io.Reader, l *logger.ZapLogger) (*resulAccrual, error) {
-
+func newPGetReq(ctx context.Context, client *http.Client,
+	server string, requestBody io.Reader, l *logger.ZapLogger) (*resulAccrual, error) {
 	l.Logger.Debug("request ", zap.String("url ", server))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", server, requestBody)
@@ -169,20 +171,16 @@ func newPGetReq(ctx context.Context, client *http.Client, server string, request
 
 	l.Logger.Debug("status ", zap.Int("new status", resp.StatusCode))
 
-	if resp.StatusCode == 429 {
+	if resp.StatusCode == HTTPRetryCode {
 		if resp.Header.Get("Retry-After") != "" {
 			result.waitTime, _ = strconv.Atoi(resp.Header.Get("Retry-After"))
 		}
-	} else if resp.StatusCode == 200 {
+	} else if resp.StatusCode == HTTPSuccessCode {
 		err = result.value.FromJSON(resp.Body)
-
 		if err != nil {
 			result.err = ErrJSONDecode
 		}
-
 		l.Logger.Debug("result ", zap.Any("order", result.value))
-
 	}
-
 	return result, nil
 }

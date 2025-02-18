@@ -21,10 +21,7 @@ type Store interface {
 
 	GetOrdersForProcessing(context.Context) ([]Order, error)
 	UpdateOrdersBalancesBatch(context.Context, []Order) error
-	//Upsert(ctx context.Context, val Metrics, prog func(n string, k int, d int64, v float64) error) error
-	//Upserts(ctx context.Context, vals []Metrics, lim int, prog func(n string, k int, d int64, v float64) error) error
-	//SelectValue(ctx context.Context, name string, prog func(n string, k int, d int64, v float64) error) error
-	//SelectValueAll(ctx context.Context, prog func(n string, k int, d int64, v float64) error) error
+
 	Close(context.Context)
 	Ping(context.Context) error
 }

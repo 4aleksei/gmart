@@ -36,13 +36,6 @@ func setupFX() *fx.App {
 			service.NewService,
 			handlers.NewHTTPServer,
 			accrual.NewAccrual,
-			/*fx.Annotate(memstoragemux.NewStoreMux,
-				fx.As(new(service.AgentMetricsStorage))),
-			service.NewHandlerStore,
-			gather.NewAppGather,
-			gatherps.NewGather,
-			httpclientpool.NewHandler,
-			handlers.NewApp,*/
 		),
 
 		fx.WithLogger(func(log *logger.ZapLogger) fxevent.Logger {
@@ -90,6 +83,6 @@ func registerHTTPServer(hh *handlers.HandlersServer, lc fx.Lifecycle) {
 }
 
 func registerSetLoggerLevel(ll *logger.ZapLogger, cfg *config.Config, lc fx.Lifecycle) {
-	ll.SetLevel(cfg.LCfg)
+	_ = ll.SetLevel(cfg.LCfg)
 	lc.Append(utils.ToHook(ll))
 }

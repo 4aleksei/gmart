@@ -19,9 +19,12 @@ type (
 )
 
 func New(cfg Config) (*ZapLogger, error) {
-
 	var level zapcore.Level
-	level.Set(cfg.Level)
+	err := level.Set(cfg.Level)
+	if err != nil {
+		return nil, err
+	}
+
 	atomic := zap.NewAtomicLevelAt(level)
 	settings := defaultSettings(atomic)
 
@@ -36,10 +39,14 @@ func New(cfg Config) (*ZapLogger, error) {
 	}, nil
 }
 
-func (z *ZapLogger) SetLevel(cfg Config) {
+func (z *ZapLogger) SetLevel(cfg Config) error {
 	var level zapcore.Level
-	level.Set(cfg.Level)
+	err := level.Set(cfg.Level)
+	if err != nil {
+		return err
+	}
 	z.level.SetLevel(level)
+	return nil
 }
 
 func (z *ZapLogger) Start(ctx context.Context) error {
@@ -47,6 +54,6 @@ func (z *ZapLogger) Start(ctx context.Context) error {
 }
 
 func (z *ZapLogger) Stop(ctx context.Context) error {
-	z.Logger.Sync()
+	_ = z.Logger.Sync()
 	return nil
 }

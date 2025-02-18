@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -34,10 +37,11 @@ type ServiceStore interface {
 }
 
 type HandleService struct {
-	store ServiceStore
-	key   string
-	httpc *httpclientpool.PoolHandler
-	jid   job.JobID
+	store  ServiceStore
+	key    string
+	keySig string
+	httpc  *httpclientpool.PoolHandler
+	jid    job.JobID
 }
 
 var (
@@ -60,22 +64,27 @@ var (
 
 func NewService(s ServiceStore, cfg *config.Config, h *httpclientpool.PoolHandler) *HandleService {
 	return &HandleService{
-		key:   cfg.Key,
-		store: s,
-		httpc: h,
+		key:    cfg.Key,
+		keySig: cfg.KeySignature,
+		store:  s,
+		httpc:  h,
 	}
 }
 
-func (s *HandleService) RegisterUser(ctx context.Context, user models.UserRegistration) (string, error) {
+func hashPass(p []byte, k string) []byte {
+	h := hmac.New(sha256.New, []byte(k))
+	dst := h.Sum(p)
+	return dst
+}
 
-	//Check Name and Pass
+func (s *HandleService) RegisterUser(ctx context.Context, user models.UserRegistration) (string, error) {
 	if user.Name == "" || user.Password == "" {
 		return "", ErrBadPass
 	}
 
-	pass := user.Password // try hash password
+	pass := hashPass([]byte(user.Password), s.keySig) // try hash password
 
-	userAdded, err := s.store.AddUser(ctx, store.User{Name: user.Name, Password: pass})
+	userAdded, err := s.store.AddUser(ctx, store.User{Name: user.Name, Password: hex.EncodeToString(pass)})
 
 	if err != nil {
 		if errors.Is(err, pg.ErrAlreadyExists) {
@@ -85,12 +94,10 @@ func (s *HandleService) RegisterUser(ctx context.Context, user models.UserRegist
 	}
 
 	id := strconv.FormatUint(userAdded.ID, 10)
-
 	return id, nil
 }
 
 func (s *HandleService) LoginUser(ctx context.Context, user models.UserRegistration) (string, error) {
-	//Check Name and Pass
 	if user.Name == "" || user.Password == "" {
 		return "", ErrBadPass
 	}
@@ -102,12 +109,13 @@ func (s *HandleService) LoginUser(ctx context.Context, user models.UserRegistrat
 		}
 		return "", err
 	}
-	if user.Password != userGet.Password {
+
+	pass := hashPass([]byte(user.Password), s.keySig) // try hash password
+	if hex.EncodeToString(pass) != userGet.Password {
 		return "", ErrAuthenticationFailed
 	}
 
 	id := strconv.FormatUint(userGet.ID, 10)
-
 	return id, nil
 }
 
@@ -127,19 +135,15 @@ func (s *HandleService) PostWithdraw(ctx context.Context, userIDStr string, with
 
 	err = s.store.InsertWithdraw(ctx, store.Withdraw{OrderID: orderID, UserID: userID, Sum: withdraw.Sum})
 	if err != nil {
-
 		if errors.Is(err, pg.ErrBalanceNotEnough) {
 			return ErrBalanceNotEnough
 		}
-
-		//variants!!!
 		return err
 	}
 	return nil
 }
 
 func (s *HandleService) RegisterOrder(ctx context.Context, userIDStr, orderIDStr string) error {
-
 	orderID, err := strconv.ParseUint(orderIDStr, 10, 64)
 	if err != nil {
 		return fmt.Errorf("failed %w : %w", ErrBadValue, err)
@@ -255,7 +259,6 @@ func (s *HandleService) sendRun(ctx context.Context, jobs chan job.Job, orders [
 			jobs <- job.Job{ID: id, Value: val}
 		}
 	}
-
 }
 
 func (s *HandleService) SendOrdersToAccrual(ctx context.Context, orders []store.Order) (map[uint64]store.Order, int, error) {
@@ -279,9 +282,9 @@ func (s *HandleService) SendOrdersToAccrual(ctx context.Context, orders []store.
 			return nil, 0, ctx.Err()
 		default:
 			if res.Err == nil {
-				if res.Result == 200 {
+				if res.Result == httpclientpool.HTTPSuccessCode {
 					resOrders[res.Value.OrderID] = res.Value
-				} else if res.Result == 429 {
+				} else if res.Result == httpclientpool.HTTPRetryCode {
 					if res.WaitSec > waitSec {
 						waitSec = res.WaitSec
 					}

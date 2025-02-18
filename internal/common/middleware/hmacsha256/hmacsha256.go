@@ -37,7 +37,6 @@ type HmacReader struct {
 
 func NewReader(r io.ReadCloser, key []byte) *HmacReader {
 	h := hmac.New(sha256.New, key)
-
 	return &HmacReader{
 		r:  r,
 		hr: h,

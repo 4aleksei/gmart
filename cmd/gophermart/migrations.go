@@ -38,8 +38,6 @@ func migrate(dbURI string, ll *logger.ZapLogger) error {
 		db.Close()
 	}()
 
-	// setup database
-
 	goose.SetBaseFS(embedMigrations)
 
 	if err := goose.SetDialect("postgres"); err != nil {

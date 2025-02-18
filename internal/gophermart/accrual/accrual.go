@@ -84,9 +84,7 @@ func (a *HandlersAccrual) mainAccrual(ctx context.Context) {
 			for i := 0; i < len(orders); i++ {
 				if val, ok := resOrders[orders[i].OrderID]; ok {
 					if orders[i].Status != val.Status {
-
 						a.l.Logger.Debug("update", zap.String("oldstatus", orders[i].Status), zap.Any("new status", val))
-
 						updOrders = append(updOrders, val)
 					}
 				}
@@ -103,6 +101,5 @@ func (a *HandlersAccrual) mainAccrual(ctx context.Context) {
 				a.l.Logger.Debug("Accrual: error update orders and balances ", zap.Error(err))
 			}
 		}
-
 	}
 }

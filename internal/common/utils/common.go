@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"sync"
 	"time"
@@ -107,25 +108,39 @@ func RetryAction(
 	}
 }
 
+const (
+	moduleDef    uint64 = 10
+	moduleDefMin uint64 = 9
+)
+
 func ValidLuhn(number uint64) bool {
-	return (number%10+checksumLuhn(number/10))%10 == 0
+	return (number%10+checksumLuhn(number/moduleDef))%moduleDef == 0
 }
 
 func checksumLuhn(number uint64) uint64 {
 	var luhn uint64
 
 	for i := 0; number > 0; i++ {
-		cur := number % 10
+		cur := number % moduleDef
 
 		if i%2 == 0 { // even
-			cur = cur * 2
-			if cur > 9 {
-				cur = cur%10 + cur/10
+			cur *= 2
+			if cur > moduleDefMin {
+				cur = cur%moduleDef + cur/moduleDef
 			}
 		}
 
 		luhn += cur
-		number = number / 10
+		number /= moduleDef
 	}
-	return luhn % 10
+	return luhn % moduleDef
+}
+
+func GenerateRandom(size int) ([]byte, error) {
+	b := make([]byte, size)
+	_, err := rand.Read(b)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
 }

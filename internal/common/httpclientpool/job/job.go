@@ -5,8 +5,7 @@ import (
 )
 
 type (
-	JobID uint64
-
+	JobID  uint64
 	Result struct {
 		ID      JobID
 		Result  int
@@ -17,8 +16,7 @@ type (
 
 	Job struct {
 		ID    JobID
-		Value   store.Order
+		Value store.Order
 	}
-
 	JobDone struct{}
 )
