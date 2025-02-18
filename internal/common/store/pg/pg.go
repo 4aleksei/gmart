@@ -297,7 +297,7 @@ func (s *PgStore) AddUser(ctx context.Context, u store.User) (store.User, error)
 	row := s.pool.QueryRow(ctx, queryDefault, u.Name, u.Password)
 	if row != nil {
 		//var m store.User
-		err := row.Scan(&u.Name, &u.Password, &u.Id)
+		err := row.Scan(&u.Name, &u.Password, &u.ID)
 		if err != nil {
 			if ProbePGDublicate(err) {
 				return u, ErrAlreadyExists
@@ -314,7 +314,7 @@ func (s *PgStore) GetUser(ctx context.Context, u store.User) (store.User, error)
 	row := s.pool.QueryRow(ctx, selectDefault, u.Name)
 	if row != nil {
 		//var m store.User
-		err := row.Scan(&u.Name, &u.Password, &u.Id)
+		err := row.Scan(&u.Name, &u.Password, &u.ID)
 		if err != nil {
 			return u, err
 		}

@@ -84,7 +84,7 @@ func (s *HandleService) RegisterUser(ctx context.Context, user models.UserRegist
 		return "", err
 	}
 
-	id := strconv.FormatUint(userAdded.Id, 10)
+	id := strconv.FormatUint(userAdded.ID, 10)
 
 	return id, nil
 }
@@ -106,13 +106,13 @@ func (s *HandleService) LoginUser(ctx context.Context, user models.UserRegistrat
 		return "", ErrAuthenticationFailed
 	}
 
-	id := strconv.FormatUint(userGet.Id, 10)
+	id := strconv.FormatUint(userGet.ID, 10)
 
 	return id, nil
 }
 
-func (s *HandleService) PostWithdraw(ctx context.Context, userIdStr string, withdraw models.Withdraw) error {
-	userID, err := strconv.ParseUint(userIdStr, 10, 64)
+func (s *HandleService) PostWithdraw(ctx context.Context, userIDStr string, withdraw models.Withdraw) error {
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
 	if err != nil {
 		return fmt.Errorf("failed %w : %w", ErrBadValueUser, err)
 	}
@@ -121,7 +121,7 @@ func (s *HandleService) PostWithdraw(ctx context.Context, userIdStr string, with
 	if err != nil {
 		return fmt.Errorf("failed %w : %w", ErrBadValue, err)
 	}
-	if utils.ValidLuhn(orderID) {
+	if !utils.ValidLuhn(orderID) {
 		return fmt.Errorf("failed %w : %w", ErrBadValue, err)
 	}
 
@@ -138,17 +138,17 @@ func (s *HandleService) PostWithdraw(ctx context.Context, userIdStr string, with
 	return nil
 }
 
-func (s *HandleService) RegisterOrder(ctx context.Context, userIdStr, orderIdStr string) error {
+func (s *HandleService) RegisterOrder(ctx context.Context, userIDStr, orderIDStr string) error {
 
-	orderID, err := strconv.ParseUint(orderIdStr, 10, 64)
+	orderID, err := strconv.ParseUint(orderIDStr, 10, 64)
 	if err != nil {
 		return fmt.Errorf("failed %w : %w", ErrBadValue, err)
 	}
-	if utils.ValidLuhn(orderID) {
+	if !utils.ValidLuhn(orderID) {
 		return fmt.Errorf("failed %w : %w", ErrBadValue, err)
 	}
 
-	userID, err := strconv.ParseUint(userIdStr, 10, 64)
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
 	if err != nil {
 		return fmt.Errorf("failed %w : %w", ErrBadValueUser, err)
 	}
@@ -170,8 +170,8 @@ func (s *HandleService) RegisterOrder(ctx context.Context, userIdStr, orderIdStr
 	return nil
 }
 
-func (s *HandleService) GetOrders(ctx context.Context, userIdStr string) ([]models.Order, error) {
-	userID, err := strconv.ParseUint(userIdStr, 10, 64)
+func (s *HandleService) GetOrders(ctx context.Context, userIDStr string) ([]models.Order, error) {
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("failed %w : %w", ErrBadValue, err)
 	}
@@ -186,8 +186,8 @@ func (s *HandleService) GetOrders(ctx context.Context, userIdStr string) ([]mode
 	return valsret, nil
 }
 
-func (s *HandleService) GetWithdrawals(ctx context.Context, userIdStr string) ([]models.Withdraw, error) {
-	userID, err := strconv.ParseUint(userIdStr, 10, 64)
+func (s *HandleService) GetWithdrawals(ctx context.Context, userIDStr string) ([]models.Withdraw, error) {
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("failed %w : %w", ErrBadValue, err)
 	}
@@ -202,8 +202,8 @@ func (s *HandleService) GetWithdrawals(ctx context.Context, userIdStr string) ([
 	return valsret, nil
 }
 
-func (s *HandleService) GetBalance(ctx context.Context, userIdStr string) (models.Balance, error) {
-	userID, err := strconv.ParseUint(userIdStr, 10, 64)
+func (s *HandleService) GetBalance(ctx context.Context, userIDStr string) (models.Balance, error) {
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
 	var valRet models.Balance
 	if err != nil {
 		return valRet, fmt.Errorf("failed %w : %w", ErrBadValue, err)

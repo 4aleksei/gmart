@@ -33,7 +33,7 @@ type (
 	User struct {
 		Name     string `db:"name"`
 		Password string `db:"password"`
-		Id       uint64 `db:"id"`
+		ID       uint64 `db:"id"`
 	}
 
 	Order struct {
