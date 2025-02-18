@@ -151,6 +151,7 @@ func newPGetReq(ctx context.Context, client *http.Client, server string, request
 
 	req, err := http.NewRequestWithContext(ctx, "GET", server, requestBody)
 	if err != nil {
+		l.Logger.Debug("make req error ", zap.Error(err))
 		return nil, err
 	}
 	req.Header.Set("Content-Type", textPlainContent)
@@ -158,6 +159,7 @@ func newPGetReq(ctx context.Context, client *http.Client, server string, request
 
 	resp, err := client.Do(req)
 	if err != nil {
+		l.Logger.Debug("DO req error ", zap.Error(err))
 		return nil, err
 	}
 	defer resp.Body.Close()
