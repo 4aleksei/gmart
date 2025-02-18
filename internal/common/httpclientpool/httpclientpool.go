@@ -3,6 +3,7 @@ package httpclientpool
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -158,7 +159,7 @@ func newPPostReq(ctx context.Context, client *http.Client, server string, reques
 
 	result := new(resulAccrual)
 	result.status = resp.StatusCode
-
+	fmt.Println("STATUS req ", resp.StatusCode)
 	if resp.StatusCode == 429 {
 		if resp.Header.Get("Retry-After") != "" {
 			result.waitTime, _ = strconv.Atoi(resp.Header.Get("Retry-After"))
@@ -169,6 +170,7 @@ func newPPostReq(ctx context.Context, client *http.Client, server string, reques
 		if err != nil {
 			result.err = ErrJSONDecode
 		}
+		fmt.Println(result.value)
 	}
 
 	return result, nil

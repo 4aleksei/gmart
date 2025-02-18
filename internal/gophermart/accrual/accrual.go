@@ -78,6 +78,8 @@ func (a *HandlersAccrual) mainAccrual(ctx context.Context) {
 				a.l.Logger.Debug("Accrual: error send orders ", zap.Error(err))
 				continue
 			}
+
+			a.l.Logger.Debug("Accrual: get resOrders", zap.Int("len ", len(resOrders)))
 			updOrders := make([]store.Order, 0)
 			for i := 0; i < len(orders); i++ {
 				if val, ok := resOrders[orders[i].OrderID]; ok {
@@ -89,6 +91,8 @@ func (a *HandlersAccrual) mainAccrual(ctx context.Context) {
 					}
 				}
 			}
+
+			a.l.Logger.Debug("Accrual: do update orders", zap.Int("len ", len(updOrders)))
 
 			if len(updOrders) == 0 {
 				continue
