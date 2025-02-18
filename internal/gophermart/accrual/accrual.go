@@ -50,7 +50,7 @@ func (a *HandlersAccrual) mainAccrual(ctx context.Context) {
 	defer a.wg.Done()
 
 	a.l.Logger.Info("Start Accrual client.")
-	var waitSec int64
+	var waitSec int64 = 0
 	for {
 		utils.SleepCancellable(ctx, time.Duration(a.cfg.PollInterval+waitSec)*time.Second)
 		select {
@@ -63,6 +63,13 @@ func (a *HandlersAccrual) mainAccrual(ctx context.Context) {
 				a.l.Logger.Debug("Accrual: error request new orders ", zap.Error(err))
 				continue
 			}
+
+			a.l.Logger.Debug("Accrual: get new ORDERS", zap.Int("len ", len(orders)))
+
+			if len(orders) == 0 {
+				continue
+			}
+
 			resOrders, w, err := a.s.SendOrdersToAccrual(ctx, orders)
 			if w > 0 {
 				waitSec = int64(w)
@@ -81,6 +88,10 @@ func (a *HandlersAccrual) mainAccrual(ctx context.Context) {
 						updOrders = append(updOrders, val)
 					}
 				}
+			}
+
+			if len(updOrders) == 0 {
+				continue
 			}
 
 			err = a.s.UpdateOrdersAndBalances(ctx, updOrders)

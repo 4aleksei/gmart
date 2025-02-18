@@ -64,8 +64,8 @@ func GetConfig() *Config {
 		cfg.DatabaseURI = envdatabaseURI
 	}
 
-	//	repository.ReadConfigEnv(&cfg.Repcfg)
-	//	readConfigEnv(&cfg.DBcfg)
-
+	if envaccrualSystemAddress := os.Getenv("ACCRUAL_SYSTEM_ADDRESS"); cfg.AccrualSystemAddress == accrualSystemAddressDefault && envaccrualSystemAddress != "" {
+		cfg.AccrualSystemAddress = envaccrualSystemAddress
+	}
 	return cfg
 }
