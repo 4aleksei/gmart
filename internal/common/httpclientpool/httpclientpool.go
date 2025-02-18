@@ -3,7 +3,6 @@ package httpclientpool
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -12,10 +11,12 @@ import (
 	"time"
 
 	"github.com/4aleksei/gmart/internal/common/httpclientpool/job"
+	"github.com/4aleksei/gmart/internal/common/logger"
 
 	"strconv"
 
 	"github.com/4aleksei/gmart/internal/common/models"
+	"go.uber.org/zap"
 	//"github.com/4aleksei/gmart/internal/common/utils"
 )
 
@@ -44,9 +45,10 @@ type (
 		WorkerCount int
 		clients     []clientInstance
 		cfg         Config
+		l           *logger.ZapLogger
 	}
 	functioExec func(context.Context, *sync.WaitGroup, *http.Client,
-		<-chan job.Job, chan<- job.Result, *Config)
+		<-chan job.Job, chan<- job.Result, *Config, *logger.ZapLogger)
 	clientInstance struct {
 		execFn functioExec
 		client *http.Client
@@ -61,8 +63,8 @@ type (
 	}
 )
 
-func NewHandler() *PoolHandler {
-	return &PoolHandler{}
+func NewHandler(l *logger.ZapLogger) *PoolHandler {
+	return &PoolHandler{l: l}
 }
 
 func (p *PoolHandler) SetCfgInit(r uint64, a string) {
@@ -98,7 +100,7 @@ func newClient() *http.Client {
 }
 
 func workerPlain(ctx context.Context, wg *sync.WaitGroup, client *http.Client,
-	jobs <-chan job.Job, results chan<- job.Result, cfg *Config) {
+	jobs <-chan job.Job, results chan<- job.Result, cfg *Config, l *logger.ZapLogger) {
 	defer wg.Done()
 	server := "http://" + cfg.Address + "/api/orders/"
 	for j := range jobs {
@@ -107,7 +109,7 @@ func workerPlain(ctx context.Context, wg *sync.WaitGroup, client *http.Client,
 			return
 		default:
 			data := strconv.FormatUint(j.Value.OrderID, 10)
-			resClient, err := plainTxtFunc(ctx, client, server, data)
+			resClient, err := plainTxtFunc(ctx, client, server, data, l)
 			if err != nil && errors.Is(err, context.Canceled) {
 				return
 			}
@@ -132,19 +134,22 @@ func workerPlain(ctx context.Context, wg *sync.WaitGroup, client *http.Client,
 func (p *PoolHandler) StartPool(ctx context.Context, jobs chan job.Job, results chan job.Result, wg *sync.WaitGroup) {
 	for i := 0; i < int(p.WorkerCount); i++ {
 		wg.Add(1)
-		go p.clients[i].execFn(ctx, wg, p.clients[i].client, jobs, results, &p.cfg)
+		go p.clients[i].execFn(ctx, wg, p.clients[i].client, jobs, results, &p.cfg, p.l)
 	}
 }
 
-func plainTxtFunc(ctx context.Context, client *http.Client, server, data string) (*resulAccrual, error) {
+func plainTxtFunc(ctx context.Context, client *http.Client, server, data string, l *logger.ZapLogger) (*resulAccrual, error) {
 
-	res, err := newPPostReq(ctx, client, server+data, http.NoBody)
+	res, err := newPGetReq(ctx, client, server+data, http.NoBody, l)
 
 	return res, err
 }
 
-func newPPostReq(ctx context.Context, client *http.Client, server string, requestBody io.Reader) (*resulAccrual, error) {
-	req, err := http.NewRequestWithContext(ctx, "POST", server, requestBody)
+func newPGetReq(ctx context.Context, client *http.Client, server string, requestBody io.Reader, l *logger.ZapLogger) (*resulAccrual, error) {
+
+	l.Logger.Debug("request ", zap.String("url ", server))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", server, requestBody)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +164,9 @@ func newPPostReq(ctx context.Context, client *http.Client, server string, reques
 
 	result := new(resulAccrual)
 	result.status = resp.StatusCode
-	fmt.Println("STATUS req ", resp.StatusCode)
+
+	l.Logger.Debug("status ", zap.Int("new status", resp.StatusCode))
+
 	if resp.StatusCode == 429 {
 		if resp.Header.Get("Retry-After") != "" {
 			result.waitTime, _ = strconv.Atoi(resp.Header.Get("Retry-After"))
@@ -170,7 +177,9 @@ func newPPostReq(ctx context.Context, client *http.Client, server string, reques
 		if err != nil {
 			result.err = ErrJSONDecode
 		}
-		fmt.Println(result.value)
+
+		l.Logger.Debug("result ", zap.Any("order", result.value))
+
 	}
 
 	return result, nil
