@@ -306,7 +306,7 @@ func (h *HandlersServer) mainPageGetBalance(res http.ResponseWriter, req *http.R
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
+	h.l.Logger.Debug("handler get balance", zap.String("user", claims["sub"].(string)), zap.Any("balance", val))
 	var buf bytes.Buffer
 	if errson := models.JSONSEncodeBytes(io.Writer(&buf), val); errson != nil {
 		h.l.Logger.Debug("error encoding response", zap.Error(errson))
