@@ -5,11 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/4aleksei/gmart/internal/common/models"
 	"github.com/4aleksei/gmart/internal/common/store"
 	"github.com/4aleksei/gmart/internal/common/store/pg"
 	"github.com/4aleksei/gmart/internal/gophermart/config"
+
+	"github.com/4aleksei/gmart/internal/common/httpclientpool"
+	"github.com/4aleksei/gmart/internal/common/httpclientpool/job"
 )
 
 type ServiceStore interface {
@@ -23,11 +27,16 @@ type ServiceStore interface {
 	GetWithdrawals(context.Context, uint64) ([]store.Withdraw, error)
 
 	GetOneOrder(context.Context, uint64) (store.Order, error)
+
+	GetOrdersForProcessing(context.Context) ([]store.Order, error)
+	UpdateOrdersBalancesBatch(context.Context, []store.Order) error
 }
 
 type HandleService struct {
 	store ServiceStore
 	key   string
+	httpc *httpclientpool.PoolHandler
+	jid   job.JobID
 }
 
 var (
@@ -48,10 +57,11 @@ var (
 	ErrBalanceNotEnough = errors.New("balance not enouth")
 )
 
-func NewService(s ServiceStore, cfg *config.Config) *HandleService {
+func NewService(s ServiceStore, cfg *config.Config, h *httpclientpool.PoolHandler) *HandleService {
 	return &HandleService{
 		key:   cfg.Key,
 		store: s,
+		httpc: h,
 	}
 }
 
@@ -199,4 +209,76 @@ func (s *HandleService) GetBalance(ctx context.Context, userIdStr string) (model
 	valRet.Accrual = val.Accrual
 	valRet.Withdrawn = val.Withdrawn
 	return valRet, err
+}
+
+// Accrual Services
+
+func (s *HandleService) GetOrdersForProcess(ctx context.Context) ([]store.Order, error) {
+	vals, err := s.store.GetOrdersForProcessing(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return vals, nil
+}
+
+func (s *HandleService) UpdateOrdersAndBalances(ctx context.Context, updOrders []store.Order) error {
+	err := s.store.UpdateOrdersBalancesBatch(ctx, updOrders)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *HandleService) newJid() job.JobID {
+	s.jid++
+	return s.jid
+}
+
+func (s *HandleService) sendRun(ctx context.Context, jobs chan job.Job, orders []store.Order) {
+	defer close(jobs)
+
+	for _, val := range orders {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			id := s.newJid()
+			jobs <- job.Job{ID: id, Value: val}
+		}
+	}
+
+}
+
+func (s *HandleService) SendOrdersToAccrual(ctx context.Context, orders []store.Order) (map[uint64]store.Order, int, error) {
+	wg := &sync.WaitGroup{}
+	jobs := make(chan job.Job, s.httpc.WorkerCount*2)
+	results := make(chan job.Result, s.httpc.WorkerCount*2)
+
+	go s.sendRun(ctx, jobs, orders)
+
+	s.httpc.StartPool(ctx, jobs, results, wg)
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+	var waitSec int
+	resOrders := make(map[uint64]store.Order)
+	for res := range results {
+		select {
+		case <-ctx.Done():
+			return nil, 0, ctx.Err()
+		default:
+			if res.Err == nil {
+				if res.Result == 200 {
+					resOrders[res.Value.OrderID] = res.Value
+				} else if res.Result == 429 {
+					if res.WaitSec > waitSec {
+						waitSec = res.WaitSec
+					}
+				}
+			}
+		}
+	}
+	return resOrders, waitSec, nil
 }

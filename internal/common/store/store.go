@@ -18,6 +18,9 @@ type Store interface {
 	GetOneOrder(context.Context, uint64) (Order, error)
 	GetBalance(context.Context, uint64) (Balance, error)
 	GetWithdrawals(context.Context, uint64) ([]Withdraw, error)
+
+	GetOrdersForProcessing(context.Context) ([]Order, error)
+	UpdateOrdersBalancesBatch(context.Context, []Order) error
 	//Upsert(ctx context.Context, val Metrics, prog func(n string, k int, d int64, v float64) error) error
 	//Upserts(ctx context.Context, vals []Metrics, lim int, prog func(n string, k int, d int64, v float64) error) error
 	//SelectValue(ctx context.Context, name string, prog func(n string, k int, d int64, v float64) error) error

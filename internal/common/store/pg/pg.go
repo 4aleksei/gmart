@@ -12,6 +12,7 @@ import (
 	"github.com/4aleksei/gmart/internal/common/store"
 	"github.com/4aleksei/gmart/internal/common/utils"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -21,6 +22,7 @@ type (
 	PgStore struct {
 		pool        *pgxpool.Pool
 		DatabaseURI string
+		limitbatch  int
 	}
 )
 
@@ -111,7 +113,9 @@ const (
 
 	selectDefault = `SELECT name, password, user_id  FROM users WHERE name = $1`
 
-	selectOrdersDefault = `SELECT  order_id, user_id , status ,accrual , uploaded_at, changed_at  FROM orders WHERE user_id = $1`
+	selectOrdersDefault = `SELECT  order_id, user_id , status ,accrual , uploaded_at, changed_at  FROM orders WHERE user_id = $1 ORDER BY uploaded_at DESC`
+
+	selectOrdersProcessingDefault = `SELECT  order_id, user_id , status ,accrual , uploaded_at, changed_at  FROM orders WHERE status='NEW' or status='PROCESSING' ORDER BY uploaded_at DESC`
 
 	selectOneOrderDefault = `SELECT  order_id, user_id , status ,accrual , uploaded_at, changed_at  FROM orders WHERE order_id = $1`
 
@@ -319,6 +323,84 @@ func (s *PgStore) GetUser(ctx context.Context, u store.User) (store.User, error)
 		return u, ErrRowNotFound
 	}
 	return u, nil
+}
+
+func (s *PgStore) GetOrdersForProcessing(ctx context.Context) ([]store.Order, error) {
+	rows, err := s.pool.Query(ctx, selectOrdersProcessingDefault)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ores := make([]store.Order, 0, 10)
+	for rows.Next() {
+		var o store.Order
+		err := rows.Scan(&o.OrderID, &o.UserID, &o.Status, &o.Accrual, &o.TimeU, &o.TimeC)
+		if err != nil {
+			return nil, err
+		}
+		ores = append(ores, o)
+	}
+	err = rows.Err()
+	if err != nil {
+		return nil, err
+	}
+	return ores, nil
+}
+
+func (s *PgStore) UpdateOrdersBalancesBatch(ctx context.Context, orders []store.Order) error {
+
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection: %w", err)
+	}
+	defer conn.Release()
+
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("error begin tx: %w", err)
+	}
+
+	defer func() {
+		defer func() { _ = tx.Rollback(ctx) }()
+	}()
+
+	var indexLimit int
+	if s.limitbatch != 0 && len(orders) > s.limitbatch {
+		indexLimit = s.limitbatch
+	} else {
+		indexLimit = len(orders)
+	}
+
+	for index := 0; index < len(orders); index += indexLimit {
+		if (index + indexLimit) > len(orders) {
+			indexLimit = len(orders) - index
+		}
+
+		batch := &pgx.Batch{}
+		for i := 0; i < indexLimit; i++ {
+			batch.Queue(queryCOrderDefault, orders[i+index].OrderID, orders[i+index].Status, orders[i+index].Accrual)
+		}
+
+		for i := 0; i < indexLimit; i++ {
+			batch.Queue(queryBalanceIncDefault, orders[i+index].UserID, orders[i+index].Accrual, 0)
+		}
+
+		br := tx.SendBatch(ctx, batch)
+		defer br.Close() //nolint:gocritic // we are closing all batch results at end of loop
+
+		/*for {
+			row := br.QueryRow()
+			var m store.Order
+			err := row.Scan(&m.Name, &m.Kind, &m.Delta, &m.Value)
+			if err != nil {
+				break
+			}
+		}*/
+		if e := br.Close(); e != nil {
+			return fmt.Errorf("closing batch result: %w", e)
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *PgStore) Close(ctx context.Context) {

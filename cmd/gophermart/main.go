@@ -6,6 +6,7 @@ import (
 	"github.com/4aleksei/gmart/internal/common/logger"
 	"github.com/4aleksei/gmart/internal/common/store"
 
+	"github.com/4aleksei/gmart/internal/common/httpclientpool"
 	"github.com/4aleksei/gmart/internal/common/store/pg"
 	"github.com/4aleksei/gmart/internal/common/utils"
 	"github.com/4aleksei/gmart/internal/gophermart/accrual"
@@ -31,6 +32,7 @@ func setupFX() *fx.App {
 			fx.Annotate(pg.New,
 				fx.As(new(service.ServiceStore)), fx.As(new(store.Store))),
 
+			httpclientpool.NewHandler,
 			service.NewService,
 			handlers.NewHTTPServer,
 			accrual.NewAccrual,
@@ -52,7 +54,7 @@ func setupFX() *fx.App {
 			gooseUP,
 
 			registerStorePg,
-
+			registerHTTPClientPool,
 			registerAccrualClient,
 			registerHTTPServer,
 		),
@@ -64,6 +66,10 @@ func gooseUP(cfg *config.Config, ll *logger.ZapLogger) {
 	if err := migrate(cfg.DatabaseURI, ll); err != nil {
 		ll.Logger.Fatal("migrate fatal", zap.Error(err))
 	}
+}
+
+func registerHTTPClientPool(h *httpclientpool.PoolHandler, cfg *config.Config) {
+	h.SetCfgInit(uint64(cfg.RateLimit), cfg.AccrualSystemAddress)
 }
 
 func registerStorePg(ss store.Store, cfg *config.Config, lc fx.Lifecycle) {

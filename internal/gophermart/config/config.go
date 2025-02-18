@@ -16,24 +16,31 @@ type Config struct {
 	Key string
 
 	LCfg logger.Config
+
+	PollInterval int64
+	RateLimit    int64
 }
 
 const (
 	addressDefault              string = ":8090"
 	levelDefault                string = "debug"
 	databaseURIDefault          string = ""
-	accrualSystemAddressDefault string = ""
+	accrualSystemAddressDefault string = "localhost:8100"
 	keyDefault                  string = "verysecret2"
+	pollIntervalDefault         int64  = 2
+	rateLimitDefault            int64  = 2
 )
 
 func GetConfig() *Config {
 	cfg := new(Config)
 
-	flag.StringVar(&cfg.Address, "a", addressDefault, "address and port to run server")
+	flag.StringVar(&cfg.Address, "a", addressDefault, "address and port to run server gopthermart")
 	flag.StringVar(&cfg.LCfg.Level, "v", levelDefault, "level of logging")
-	flag.StringVar(&cfg.AccrualSystemAddress, "r", accrualSystemAddressDefault, "address and port to run accrual system")
+	flag.StringVar(&cfg.AccrualSystemAddress, "r", accrualSystemAddressDefault, "accrual client`s address and port")
 
 	flag.StringVar(&cfg.DatabaseURI, "d", databaseURIDefault, "database postgres URI")
+	flag.Int64Var(&cfg.PollInterval, "i", pollIntervalDefault, "interval bd  request for accrual")
+	flag.Int64Var(&cfg.RateLimit, "l", rateLimitDefault, "workers count")
 	//	flag.StringVar(&cfg.FilePath, "f", FilePathDefault, "FilePath store")
 
 	//	repository.ReadConfigFlag(&cfg.Repcfg)
