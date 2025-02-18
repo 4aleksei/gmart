@@ -28,7 +28,7 @@ type (
 
 	Balance struct {
 		Accrual   float64 `json:"current"`
-		Withdrawn uint32  `json:"withdrawn"`
+		Withdrawn float64 `json:"withdrawn"`
 	}
 
 	Withdraw struct {

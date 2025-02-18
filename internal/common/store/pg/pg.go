@@ -175,7 +175,7 @@ func (s *PgStore) InsertWithdraw(ctx context.Context, w store.Withdraw) error {
 		return ErrBalanceNotEnough
 	}
 
-	row = tx.QueryRow(ctx, queryBalanceDecDefault, w.UserID, w.Sum, int(w.Sum))
+	row = tx.QueryRow(ctx, queryBalanceDecDefault, w.UserID, w.Sum, w.Sum)
 	if row != nil {
 		var u store.Balance
 		err := row.Scan(&u.UserID, &u.Accrual, &u.Withdrawn, &u.TimeC)

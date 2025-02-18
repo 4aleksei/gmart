@@ -48,7 +48,7 @@ type (
 	Balance struct {
 		UserID    uint64    `db:"user_id"`
 		Accrual   float64   `db:"current"`
-		Withdrawn uint32    `db:"withdrawn"`
+		Withdrawn float64   `db:"withdrawn"`
 		TimeC     time.Time `db:"changed_at"`
 	}
 
