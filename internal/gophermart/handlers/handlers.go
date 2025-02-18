@@ -211,6 +211,8 @@ func (h *HandlersServer) mainPagePostWithdraw(res http.ResponseWriter, req *http
 		h.l.Logger.Debug("cannot decode request JSON body", zap.Error(err))
 		res.WriteHeader(http.StatusInternalServerError)
 		return
+	} else {
+		h.l.Logger.Debug("try order withdraw", zap.String("user", claims["sub"].(string)), zap.Any("order", withdraw))
 	}
 
 	err := h.s.PostWithdraw(req.Context(), claims["sub"].(string), withdraw)

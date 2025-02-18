@@ -122,7 +122,7 @@ func (s *HandleService) PostWithdraw(ctx context.Context, userIDStr string, with
 		return fmt.Errorf("failed %w : %w", ErrBadValue, err)
 	}
 	if !utils.ValidLuhn(orderID) {
-		return fmt.Errorf("failed %w : %w", ErrBadValue, err)
+		return fmt.Errorf("withdraw order failed Luhn %w ", ErrBadValue)
 	}
 
 	err = s.store.InsertWithdraw(ctx, store.Withdraw{OrderID: orderID, UserID: userID, Sum: withdraw.Sum})
@@ -145,7 +145,7 @@ func (s *HandleService) RegisterOrder(ctx context.Context, userIDStr, orderIDStr
 		return fmt.Errorf("failed %w : %w", ErrBadValue, err)
 	}
 	if !utils.ValidLuhn(orderID) {
-		return fmt.Errorf("failed %w : %w", ErrBadValue, err)
+		return fmt.Errorf("register order failed Luhn %w", ErrBadValue)
 	}
 
 	userID, err := strconv.ParseUint(userIDStr, 10, 64)
