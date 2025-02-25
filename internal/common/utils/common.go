@@ -2,7 +2,9 @@ package utils
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"sync"
 	"time"
@@ -143,4 +145,10 @@ func GenerateRandom(size int) ([]byte, error) {
 		return nil, err
 	}
 	return b, nil
+}
+
+func HashPass(p []byte, k string) []byte {
+	h := hmac.New(sha256.New, []byte(k))
+	dst := h.Sum(p)
+	return dst
 }

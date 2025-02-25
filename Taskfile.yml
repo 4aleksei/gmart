@@ -66,4 +66,10 @@ tasks:
         - |
           cd ./cmd/gophermart
           go build
-
+  test:
+      desc: Run go test all
+      silent: true
+      cmds:
+        - |
+          cd ./internal/gophermart/handlers
+          go test

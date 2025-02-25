@@ -2,8 +2,7 @@ package service
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
+
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -71,18 +70,12 @@ func NewService(s ServiceStore, cfg *config.Config, h *httpclientpool.PoolHandle
 	}
 }
 
-func hashPass(p []byte, k string) []byte {
-	h := hmac.New(sha256.New, []byte(k))
-	dst := h.Sum(p)
-	return dst
-}
-
 func (s *HandleService) RegisterUser(ctx context.Context, user models.UserRegistration) (string, error) {
 	if user.Name == "" || user.Password == "" {
 		return "", ErrBadPass
 	}
 
-	pass := hashPass([]byte(user.Password), s.keySig) // try hash password
+	pass := utils.HashPass([]byte(user.Password), s.keySig) // try hash password
 
 	userAdded, err := s.store.AddUser(ctx, store.User{Name: user.Name, Password: hex.EncodeToString(pass)})
 
@@ -110,7 +103,7 @@ func (s *HandleService) LoginUser(ctx context.Context, user models.UserRegistrat
 		return "", err
 	}
 
-	pass := hashPass([]byte(user.Password), s.keySig) // try hash password
+	pass := utils.HashPass([]byte(user.Password), s.keySig) // try hash password
 	if hex.EncodeToString(pass) != userGet.Password {
 		return "", ErrAuthenticationFailed
 	}
