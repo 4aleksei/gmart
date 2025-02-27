@@ -73,3 +73,9 @@ tasks:
         - |
           cd ./internal/gophermart/handlers
           go test
+  up:
+      desc: compile and RUN stack
+      silent: true
+      cmds:
+        - |
+          sudo docker compose up
