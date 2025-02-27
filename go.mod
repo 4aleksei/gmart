@@ -1,6 +1,6 @@
 module github.com/4aleksei/gmart
 
-go 1.23.2
+go 1.22
 
 require (
 	github.com/go-chi/chi/v5 v5.2.1
