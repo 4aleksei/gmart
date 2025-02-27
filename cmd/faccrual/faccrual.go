@@ -21,8 +21,7 @@ func JSONSEncodeBytes(w io.Writer, val any) error {
 	return err
 }
 
-func handle_http(res http.ResponseWriter, req *http.Request) {
-
+func handleHTTP(res http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("number")
 	log.Print("read order ", id)
 
@@ -61,6 +60,6 @@ func handle_http(res http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/api/orders/{number}", handle_http)
+	http.HandleFunc("/api/orders/{number}", handleHTTP)
 	http.ListenAndServe(":8100", nil)
 }
