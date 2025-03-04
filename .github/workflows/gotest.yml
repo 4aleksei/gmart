@@ -17,6 +17,7 @@ jobs:
 
       - name: Run linter
         run: |
+          brew install go-task
           task lint
 
       - name: Run test
