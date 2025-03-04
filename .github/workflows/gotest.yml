@@ -15,8 +15,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Run linter
+        run: |
+          task lint
+
       - name: Run test
         run: |
           cd ./internal/gophermart/handlers
           go test -cover
+      
 
