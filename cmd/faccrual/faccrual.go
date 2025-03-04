@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 )
 
 type OrderAccrual struct {
@@ -29,14 +30,12 @@ func handleHTTP(res http.ResponseWriter, req *http.Request) {
 	order.OrderID = id
 
 	switch id[:1] {
-
 	case "1":
 		order.Status = "INVALID"
 
 	default:
 		order.Status = "PROCESSED"
 		order.Accrual = 700
-
 	}
 
 	res.Header().Add("Content-Type", "application/json")
@@ -61,5 +60,12 @@ func handleHTTP(res http.ResponseWriter, req *http.Request) {
 
 func main() {
 	http.HandleFunc("/api/orders/{number}", handleHTTP)
-	http.ListenAndServe(":8100", nil)
+	Srv := &http.Server{
+		Addr:              ":8100",
+		Handler:           nil,
+		ReadHeaderTimeout: 2 * time.Second,
+	}
+	if err := Srv.ListenAndServe(); err != nil {
+		log.Fatal("ListenAndServe: ", err)
+	}
 }

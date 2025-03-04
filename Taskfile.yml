@@ -72,7 +72,7 @@ tasks:
       cmds:
         - |
           cd ./internal/gophermart/handlers
-          go test
+          go test -cover
   up:
       desc: compile and RUN stack
       silent: true

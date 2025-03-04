@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/hex"
+
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,10 +22,16 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/go-chi/jwtauth/v5"
+)
+
+const (
+	defaultKeyLen int = 16
 )
 
 func testRequest(t *testing.T, ts *httptest.Server, method,
-	path string, body string, contentType string, contentEnc string) (*http.Response, string) {
+	path string, body string, contentType string, contentEnc string, jwt []*http.Cookie) (*http.Response, string) {
 	var buf bytes.Buffer
 	if contentEnc != "" {
 		gz := gzip.NewWriter(&buf)
@@ -45,6 +52,15 @@ func testRequest(t *testing.T, ts *httptest.Server, method,
 		req.Header.Add("Content-Encoding", contentEnc)
 		req.Header.Add("Accept-Encoding", contentEnc)
 	}
+
+	if jwt != nil {
+		if len(jwt) > 0 {
+			for _, v := range jwt {
+				req.AddCookie(v)
+			}
+		}
+	}
+
 	require.NoError(t, err)
 	resp, err := ts.Client().Do(req)
 	require.NoError(t, err)
@@ -99,8 +115,10 @@ func Test_handlers_mainPageRegister(t *testing.T) {
 
 	h := new(HandlersServer)
 	h.s = serV
+
 	var errL error
 	h.l, errL = logger.New(logger.Config{Level: "debug"})
+
 	require.NoError(t, errL)
 
 	ts := httptest.NewServer(h.newRouter())
@@ -114,7 +132,7 @@ func Test_handlers_mainPageRegister(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, respBody := testRequest(t, ts, tt.req.method, tt.req.url, tt.req.body, tt.req.contentType, tt.req.contentEnc)
+			resp, respBody := testRequest(t, ts, tt.req.method, tt.req.url, tt.req.body, tt.req.contentType, tt.req.contentEnc, nil)
 			assert.Equal(t, tt.want.statusCode, resp.StatusCode)
 			if tt.want.contentType != "" {
 				assert.Equal(t, tt.want.contentType, resp.Header.Get("Content-Type"))
@@ -141,6 +159,115 @@ func Test_handlers_mainPageRegister(t *testing.T) {
 }
 
 func Test_handlers_mainPageLogin(t *testing.T) {
+	type want struct {
+		contentType string
+		statusCode  int
+		body        string
+		contentEnc  string
+	}
+	type request struct {
+		method      string
+		url         string
+		body        string
+		contentType string
+		contentEnc  string
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	stor := mock.NewMockStore(ctrl)
+	cfg := &config.Config{}
+	if cfg.Key == "" {
+		b, err := utils.GenerateRandom(defaultKeyLen)
+		if err != nil {
+			panic("no key")
+		}
+		cfg.Key = hex.EncodeToString(b)
+	}
+	if cfg.KeySignature == "" {
+		b, err := utils.GenerateRandom(defaultKeyLen)
+		if err != nil {
+			panic("no key")
+		}
+		cfg.KeySignature = hex.EncodeToString(b)
+	}
+
+	passWord := "12345"
+	name := "Vasia"
+	wrongname := "WrongName"
+	passWordSig := hex.EncodeToString(utils.HashPass([]byte(passWord), cfg.KeySignature))
+	arg := store.User{
+		Name: name,
+	}
+	argWrong := store.User{
+		Name: wrongname,
+	}
+	argRet := store.User{
+		Name:     name,
+		Password: passWordSig,
+		ID:       1,
+	}
+
+	stor.EXPECT().
+		GetUser(gomock.Any(), arg).
+		Return(argRet, nil).
+		MaxTimes(5)
+
+	stor.EXPECT().
+		GetUser(gomock.Any(), argWrong).
+		Return(argRet, pg.ErrRowNotFound).
+		MaxTimes(5)
+
+	serV := service.NewService(stor, cfg, nil)
+
+	h := new(HandlersServer)
+	h.key = cfg.Key
+	h.s = serV
+	var errL error
+	h.l, errL = logger.New(logger.Config{Level: "debug"})
+	require.NoError(t, errL)
+
+	ts := httptest.NewServer(h.newRouter())
+	defer ts.Close()
+	tests := []struct {
+		name string
+		req  request
+		want want
+	}{
+		{name: "Login User Test No1", req: request{method: http.MethodPost, url: "/api/user/login", body: " {\"login\":\"" + name + "\" , \"password\":\"" + passWord + "\" }  ", contentType: "application/json"}, want: want{statusCode: http.StatusOK, contentType: "", body: ""}},
+		{name: "Login User Test No2", req: request{method: http.MethodPost, url: "/api/user/login", body: " {\"login\":\"" + name + "\" , \"password\":\"" + "wrongpass" + "\" }  ", contentType: "application/json"}, want: want{statusCode: http.StatusUnauthorized, contentType: "", body: ""}},
+		{name: "Login User Test No3", req: request{method: http.MethodPost, url: "/api/user/login", body: " {\"login\":\"" + wrongname + "\" , \"password\":\"" + passWord + "\" }  ", contentType: "application/json"}, want: want{statusCode: http.StatusUnauthorized, contentType: "", body: ""}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, respBody := testRequest(t, ts, tt.req.method, tt.req.url, tt.req.body, tt.req.contentType, tt.req.contentEnc, nil)
+			assert.Equal(t, tt.want.statusCode, resp.StatusCode)
+			if tt.want.contentType != "" {
+				assert.Equal(t, tt.want.contentType, resp.Header.Get("Content-Type"))
+			}
+			if tt.want.contentEnc != "" {
+				assert.Equal(t, tt.want.contentEnc, resp.Header.Get("Content-Encoding"))
+
+				body, err := gzip.NewReader(strings.NewReader(respBody))
+				require.NoError(t, err)
+				buf, errR := io.ReadAll(body)
+				require.NoError(t, errR)
+				if tt.want.body != "" {
+					assert.JSONEq(t, tt.want.body, string(buf))
+				}
+			} else {
+				if tt.want.body != "" {
+					assert.JSONEq(t, tt.want.body, respBody)
+				}
+			}
+
+			resp.Body.Close()
+		})
+	}
+}
+
+func Test_handlers_mainPagePostOrder(t *testing.T) {
 	type want struct {
 		contentType string
 		statusCode  int
@@ -190,10 +317,17 @@ func Test_handlers_mainPageLogin(t *testing.T) {
 		Return(argRet, pg.ErrRowNotFound).
 		MaxTimes(5)
 
+	stor.EXPECT().
+		InsertOrder(gomock.Any(), gomock.Any()).
+		Return(nil).
+		MaxTimes(5)
+
 	serV := service.NewService(stor, cfg, nil)
 
 	h := new(HandlersServer)
 	h.s = serV
+	h.key = cfg.Key
+	h.tokenAuth = jwtauth.New("HS256", []byte(cfg.Key), nil)
 	var errL error
 	h.l, errL = logger.New(logger.Config{Level: "debug"})
 	require.NoError(t, errL)
@@ -205,13 +339,17 @@ func Test_handlers_mainPageLogin(t *testing.T) {
 		req  request
 		want want
 	}{
-		{name: "Login User Test No1", req: request{method: http.MethodPost, url: "/api/user/login", body: " {\"login\":\"" + name + "\" , \"password\":\"" + passWord + "\" }  ", contentType: "application/json"}, want: want{statusCode: http.StatusOK, contentType: "", body: ""}},
-		{name: "Login User Test No2", req: request{method: http.MethodPost, url: "/api/user/login", body: " {\"login\":\"" + name + "\" , \"password\":\"" + "wrongpass" + "\" }  ", contentType: "application/json"}, want: want{statusCode: http.StatusUnauthorized, contentType: "", body: ""}},
-		{name: "Login User Test No3", req: request{method: http.MethodPost, url: "/api/user/login", body: " {\"login\":\"" + wrongname + "\" , \"password\":\"" + passWord + "\" }  ", contentType: "application/json"}, want: want{statusCode: http.StatusUnauthorized, contentType: "", body: ""}},
+		{name: "Post Order before login No1", req: request{method: http.MethodPost, url: "/api/user/orders", body: "5062821234567892", contentType: "text/plain"}, want: want{statusCode: http.StatusUnauthorized, contentType: "", body: ""}},
+		{name: "Login User  No2", req: request{method: http.MethodPost, url: "/api/user/login", body: " {\"login\":\"" + name + "\" , \"password\":\"" + passWord + "\" }  ", contentType: "application/json"}, want: want{statusCode: http.StatusOK, contentType: "", body: ""}},
+		{name: "Post Order No3", req: request{method: http.MethodPost, url: "/api/user/orders", body: "5062821234567892", contentType: "text/plain"}, want: want{statusCode: http.StatusAccepted, contentType: "", body: ""}},
+		{name: "Post Order with Non Luhn Number No4", req: request{method: http.MethodPost, url: "/api/user/orders", body: "123456", contentType: "text/plain"}, want: want{statusCode: http.StatusUnprocessableEntity, contentType: "", body: ""}},
 	}
+
+	jwt := make([]*http.Cookie, 0)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, respBody := testRequest(t, ts, tt.req.method, tt.req.url, tt.req.body, tt.req.contentType, tt.req.contentEnc)
+			resp, respBody := testRequest(t, ts, tt.req.method, tt.req.url, tt.req.body, tt.req.contentType, tt.req.contentEnc, jwt)
 			assert.Equal(t, tt.want.statusCode, resp.StatusCode)
 			if tt.want.contentType != "" {
 				assert.Equal(t, tt.want.contentType, resp.Header.Get("Content-Type"))
@@ -232,6 +370,9 @@ func Test_handlers_mainPageLogin(t *testing.T) {
 				}
 			}
 
+			if len(jwt) == 0 {
+				jwt = append(jwt, resp.Cookies()...)
+			}
 			resp.Body.Close()
 		})
 	}
