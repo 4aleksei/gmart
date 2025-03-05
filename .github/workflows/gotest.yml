@@ -15,15 +15,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Run linter
+      - name: Install task
         run: |
           sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d
-          ./bin/task lint
+          task install-linter
+
+      - name: Run linter
+        run: |
+          task lint
 
       - name: Run test
         run: |
-          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d
-          ./bin/task test
+          task test
+#          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d
+#          task install-linter
+          
 
-      
 
