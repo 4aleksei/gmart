@@ -19,6 +19,7 @@ jobs:
         run: |
           sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d
           ./bin/task install-linter
+          apt install golangci-lint
 
       - name: Run linter
         run: |
