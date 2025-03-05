@@ -17,12 +17,13 @@ jobs:
 
       - name: Run linter
         run: |
-          brew install go-task
+          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d
           task lint
 
       - name: Run test
         run: |
-          cd ./internal/gophermart/handlers
-          go test -cover
+          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d
+          task test
+
       
 
