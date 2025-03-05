@@ -34,7 +34,7 @@ jobs:
           command: echo 'Hello, World!'
 
       - name: Notify Command Success
-    	run: echo "Command executed on ${{ secrets.SSH_HOST }} successfully!"
+        run: echo "Command executed on ${{ secrets.SSH_HOST }} successfully!"
 
 #      - name: Configure SSH
 #        env:
