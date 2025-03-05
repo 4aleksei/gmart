@@ -59,7 +59,7 @@ jobs:
           DATABASE_PASS: '${{ secrets.DATABASE_PASS }}'
           DATABASE_URI: '${{ secrets.DATABASE_URI }}' 
         run: |
-        cat >>./.env <<END
+          cat >>./.env <<END
           RUN_ADDRESS=$RUN_ADDRESS
           ACCRUAL_SYSTEM_ADDRESS=$ACCRUAL_SYSTEM_ADDRESS
           DATABASE_DB=$DATABASE_DB
