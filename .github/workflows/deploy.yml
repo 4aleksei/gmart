@@ -43,10 +43,12 @@ jobs:
           END
       - name: Compile 
         run: |
+          mv ./.git ./.git_temp
           cd ./cmd/gophermart
           go build
           cd ../faccrual
           go build
+          mv ./.git_temp ./.git
       - name: Run Deploy
         run: |
           ssh -F ~/.ssh/config -i ~/.ssh/github  target "docker compose down || true ;exit"
