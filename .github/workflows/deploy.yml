@@ -55,7 +55,8 @@ jobs:
           ssh -F ~/.ssh/config -i ~/.ssh/github  target "docker compose down || true ;exit"
           scp -F ~/.ssh/config -i ~/.ssh/github  ./cmd/gophermart/gophermart target:~/
           scp -F ~/.ssh/config -i ~/.ssh/github  ./cmd/faccrual/faccrual target:~/
-          scp -F ~/.ssh/config -i ~/.ssh/github -r ./config target:~/
+          ssh -F ~/.ssh/config -i ~/.ssh/github  target "mkdir config;exit"
+          scp -F ~/.ssh/config -i ~/.ssh/github  ./config/* target:~/config/
           scp -F ~/.ssh/config -i ~/.ssh/github  ./config/Dockerfile.* target:~/
           scp -F ~/.ssh/config -i ~/.ssh/github  ./docker-compose.yaml target:~/
           ssh -F ~/.ssh/config -i ~/.ssh/github target "RUN_ADDRESS='${{ secrets.RUN_ADDRESS }}' ACCRUAL_SYSTEM_ADDRESS='${{ secrets.ACCRUAL_SYSTEM_ADDRESS }}' DATABASE_DB='${{ secrets.DATABASE_DB }}' DATABASE_USER='${{ secrets.DATABASE_USER }}' DATABASE_PASS='${{ secrets.DATABASE_PASS }}'  DATABASE_URI='${{ secrets.DATABASE_URI }}' docker compose up -d --build --force-recreate;exit"
