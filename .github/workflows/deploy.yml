@@ -19,7 +19,7 @@ jobs:
   deploy:
     name: Deploy
     runs-on: self-hosted
-    container: alpine:3.14
+    container: golang:1.22
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -30,7 +30,6 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
-          apk add openssh
           mkdir -p ~/.ssh/
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/github
           chmod 600 ~/.ssh/github
@@ -44,7 +43,7 @@ jobs:
           END
       - name: Run Deploy
         run: |
-          ssh -F ~/.ssh/config -i ~/.ssh/github target "docker compose down || true ;exit"
+          ssh target "docker compose down || true ;exit"
           scp -F ~/.ssh/config -i ~/.ssh/github  ./Dockerfile.* target:~/
           scp -F ~/.ssh/config -i ~/.ssh/github  ./docker-compose.yaml target:~/
           ssh -F ~/.ssh/config -i ~/.ssh/github target "RUN_ADDRESS='${{ secrets.RUN_ADDRESS }}' ACCRUAL_SYSTEM_ADDRESS='${{ secrets.ACCRUAL_SYSTEM_ADDRESS }}' DATABASE_DB='${{ secrets.DATABASE_DB }}' DATABASE_USER='${{ secrets.DATABASE_USER }}' DATABASE_PASS='${{ secrets.DATABASE_PASS }}'  DATABASE_URI='${{ secrets.DATABASE_URI }}' docker compose up -d --build --force-recreate;exit"
