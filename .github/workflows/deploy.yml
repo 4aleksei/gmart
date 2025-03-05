@@ -55,7 +55,7 @@ jobs:
           ssh -F ~/.ssh/config -i ~/.ssh/github  target "docker compose down || true ;exit"
           scp -F ~/.ssh/config -i ~/.ssh/github  ./cmd/gophermart/gophermart target:~/
           scp -F ~/.ssh/config -i ~/.ssh/github  ./cmd/faccrual/faccrual target:~/
-          ssh -F ~/.ssh/config -i ~/.ssh/github  target "mkdir config;exit"
+          ssh -F ~/.ssh/config -i ~/.ssh/github  target "mkdir config || true;exit"
           scp -F ~/.ssh/config -i ~/.ssh/github  ./config/* target:~/config/
           scp -F ~/.ssh/config -i ~/.ssh/github  ./config/Dockerfile.* target:~/
           scp -F ~/.ssh/config -i ~/.ssh/github  ./docker-compose.yaml target:~/
