@@ -23,27 +23,40 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Configure SSH
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-        run: |
-          mkdir -p ~/.ssh/
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/github
-          chmod 600 ~/.ssh/github
-          cat >>~/.ssh/config <<END
-          Host target
-            HostName $SSH_HOST
-            User $SSH_USER
-            IdentityFile ~/.ssh/github
-            LogLevel ERROR
-            StrictHostKeyChecking no
-          END
-      - name: Run Deploy
-        run: |
-          ping 127.0.0.1 -c 4
-          ssh target "touch test_file.file;exit"
+      - name: Run remote command via SSH
+        uses: D3rHase/ssh-command-action@latest
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          user: ${{ secrets.SSH_USER }}
+          private_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host_fingerprint: ${{ secrets.SSH_HOST_FINGERPRINT }}
+          command: echo 'Hello, World!'
+
+       - name: Notify Command Success
+         run: echo "Command executed on ${{ secrets.SSH_HOST }} successfully!"
+
+#      - name: Configure SSH
+#        env:
+#          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+#          SSH_HOST: ${{ secrets.SSH_HOST }}
+#          SSH_USER: ${{ secrets.SSH_USER }}
+#        run: |
+#          mkdir -p ~/.ssh/
+#          echo "$SSH_PRIVATE_KEY" > ~/.ssh/github
+#          chmod 600 ~/.ssh/github
+#          cat >>~/.ssh/config <<END
+#          Host target
+#            HostName $SSH_HOST
+#            User $SSH_USER
+#            IdentityFile ~/.ssh/github
+#            LogLevel ERROR
+#            StrictHostKeyChecking no
+#          END
+#      - name: Run Deploy
+#        run: |
+#          ping 127.0.0.1 -c 4
+#          ssh target "touch test_file.file;exit"
 #          ssh target "docker compose down ;exit"
 #          scp ./docker-compose.yaml target:~/
 #          ssh target "RUN_ADDRESS='${{ secrets.RUN_ADDRESS }}' ACCRUAL_SYSTEM_ADDRESS='${{ secrets.ACCRUAL_SYSTEM_ADDRESS }}' DATABASE_DB='${{ secrets.DATABASE_DB }}' DATABASE_USER='${{ secrets.DATABASE_USER }}' DATABASE_PASS='${{ secrets.DATABASE_PASS }}'  DATABASE_URI='${{ secrets.DATABASE_URI }}' docker compose up -d --build --force-recreate;exit"
