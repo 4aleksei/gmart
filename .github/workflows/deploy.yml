@@ -43,9 +43,9 @@ jobs:
           END
       - name: Compile 
         run: |
-          cd ~/cmd/gopehmart
+          cd ./cmd/gopehmart
           go build
-          cd ~/cmd/faccrual
+          cd ../faccrual
           go build
       - name: Run Deploy
         run: |
