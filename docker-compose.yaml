@@ -3,15 +3,15 @@ services:
     container_name: gopher-postgres
     image: postgres:17.2
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -d postgres" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_DB}" ]
       interval: 10s
       retries: 5
       start_period: 30s
       timeout: 10s
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_DB: postgres
-      POSTGRES_PASSWORD: "P@ssw0rd"
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_DB: ${DATABASE_DB}
+      POSTGRES_PASSWORD: ${DATABASE_PASS}
       PGDATA: "/var/lib/postgresql/data"
     volumes:
       - "./db/init:/docker-entrypoint-initdb.d"
@@ -36,9 +36,9 @@ services:
     ports:
       - 8180:8080
     environment:
-      DATABASE_URI: "postgresql://gopher-postgres:5432/postgres?user=postgres&password=P@ssw0rd"
-      RUN_ADDRESS: ":8080"
-      ACCRUAL_SYSTEM_ADDRESS: "http://gopher-faccrual:8100"
+      DATABASE_URI: ${DATABASE_URI}
+      RUN_ADDRESS: ${RUN_ADDRESS}
+      ACCRUAL_SYSTEM_ADDRESS: ${ACCRUAL_SYSTEM_ADDRESS}
     networks:
       - gopher-net
     restart: always
