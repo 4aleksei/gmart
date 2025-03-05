@@ -25,7 +25,9 @@ jobs:
 
       - name: Run linter
         run: |
+          mv ./.git ./.git_temp  
           ./bin/task lint
+          mv ./.git_temp ./.git  
 
       - name: Run test
         run: |
