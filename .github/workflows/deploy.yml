@@ -44,7 +44,7 @@ jobs:
           END
       - name: Run Deploy
         run: |
-          ssh -F ~/.ssh/config -i ~/.ssh/github target "docker compose down ;exit"
+          ssh -F ~/.ssh/config -i ~/.ssh/github target "docker compose down || true ;exit"
           scp -F ~/.ssh/config -i ~/.ssh/github  ./docker-compose.yaml target:~/
           ssh -F ~/.ssh/config -i ~/.ssh/github target "RUN_ADDRESS='${{ secrets.RUN_ADDRESS }}' ACCRUAL_SYSTEM_ADDRESS='${{ secrets.ACCRUAL_SYSTEM_ADDRESS }}' DATABASE_DB='${{ secrets.DATABASE_DB }}' DATABASE_USER='${{ secrets.DATABASE_USER }}' DATABASE_PASS='${{ secrets.DATABASE_PASS }}'  DATABASE_URI='${{ secrets.DATABASE_URI }}' docker compose up -d --build --force-recreate;exit"
 
