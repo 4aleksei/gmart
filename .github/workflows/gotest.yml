@@ -18,15 +18,15 @@ jobs:
       - name: Install task
         run: |
           sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d
-          task install-linter
+          ./bin/task install-linter
 
       - name: Run linter
         run: |
-          task lint
+          ./bin/task lint
 
       - name: Run test
         run: |
-          task test
+          ./bin/task test
 #          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d
 #          task install-linter
           
