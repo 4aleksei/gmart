@@ -50,7 +50,7 @@ jobs:
           go build
           cd ../../
           mv ./.git_temp ./.git
-      - name: Run Deploy
+      - name: Make env
         env: 
           RUN_ADDRESS: '${{ secrets.RUN_ADDRESS }}'
           ACCRUAL_SYSTEM_ADDRESS: '${{ secrets.ACCRUAL_SYSTEM_ADDRESS }}'
@@ -59,6 +59,16 @@ jobs:
           DATABASE_PASS: '${{ secrets.DATABASE_PASS }}'
           DATABASE_URI: '${{ secrets.DATABASE_URI }}' 
         run: |
+        cat >>./.env <<END
+          RUN_ADDRESS=$RUN_ADDRESS
+          ACCRUAL_SYSTEM_ADDRESS=$ACCRUAL_SYSTEM_ADDRESS
+          DATABASE_DB=$DATABASE_DB
+          DATABASE_USER=$DATABASE_USER
+          DATABASE_PASS=$DATABASE_PASS
+          DATABASE_URI=$DATABASE_URI
+          END
+      - name: Run Deploy
+        run: |
           ssh -F ~/.ssh/config -i ~/.ssh/github  target "docker compose down || true ;exit"
           scp -F ~/.ssh/config -i ~/.ssh/github  ./cmd/gophermart/gophermart target:~/
           scp -F ~/.ssh/config -i ~/.ssh/github  ./cmd/faccrual/faccrual target:~/
@@ -66,5 +76,6 @@ jobs:
           scp -F ~/.ssh/config -i ~/.ssh/github  ./config/* target:~/config/
           scp -F ~/.ssh/config -i ~/.ssh/github  ./config/Dockerfile.* target:~/
           scp -F ~/.ssh/config -i ~/.ssh/github  ./docker-compose.yaml target:~/
-          ssh -F ~/.ssh/config -i ~/.ssh/github target "RUN_ADDRESS=$RUN_ADDRESS ACCRUAL_SYSTEM_ADDRESS=$ACCRUAL_SYSTEM_ADDRESS DATABASE_DB=$DATABASE_DB DATABASE_USER=$DATABASE_USER DATABASE_PASS=$DATABASE_PASS  DATABASE_URI=$DATABASE_URI docker compose up -d --build --force-recreate;exit"
+          scp -F ~/.ssh/config -i ~/.ssh/github  ./.env target:~/
+          ssh -F ~/.ssh/config -i ~/.ssh/github target "docker compose up -d --build --force-recreate;exit"
 
