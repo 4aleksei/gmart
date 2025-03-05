@@ -42,8 +42,7 @@ jobs:
           END
       - name: Run Deploy
         run: |
-          ping 8.8.8.8 -c 4
-          ping 51.250.51.254 -c 4
+          ping 127.0.0.1 -c 4
           ssh target "touch test_file.file;exit"
 #          ssh target "docker compose down ;exit"
 #          scp ./docker-compose.yaml target:~/
