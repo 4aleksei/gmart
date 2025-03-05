@@ -43,7 +43,7 @@ jobs:
           END
       - name: Compile 
         run: |
-          cd ./cmd/gopehmart
+          cd ./cmd/gophemart
           go build
           cd ../faccrual
           go build
