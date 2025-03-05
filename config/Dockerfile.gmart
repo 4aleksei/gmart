@@ -4,4 +4,4 @@ WORKDIR /app
 
 COPY ./gophermart ./
 
-ENTRYPOINT ["/app/gophermart"]
+CMD ["/app/gophermart"]

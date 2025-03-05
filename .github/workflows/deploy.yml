@@ -78,4 +78,4 @@ jobs:
           scp -F ~/.ssh/config -i ~/.ssh/github  ./docker-compose.yaml target:~/
           scp -F ~/.ssh/config -i ~/.ssh/github  ./.env target:~/
           ssh -F ~/.ssh/config -i ~/.ssh/github target "docker compose up -d --build --force-recreate;exit"
-
+          ssh -F ~/.ssh/config -i ~/.ssh/github  target "rm -f ./.env || true;exit"
