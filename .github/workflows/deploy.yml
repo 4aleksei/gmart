@@ -33,8 +33,8 @@ jobs:
           host_fingerprint: ${{ secrets.SSH_HOST_FINGERPRINT }}
           command: echo 'Hello, World!'
 
-       - name: Notify Command Success
-         run: echo "Command executed on ${{ secrets.SSH_HOST }} successfully!"
+      - name: Notify Command Success
+    	run: echo "Command executed on ${{ secrets.SSH_HOST }} successfully!"
 
 #      - name: Configure SSH
 #        env:
