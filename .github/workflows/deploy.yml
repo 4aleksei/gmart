@@ -42,8 +42,9 @@ jobs:
           END
       - name: Run Deploy
         run: |
-          ssh target "touch test_file.file"
-#          ssh target "docker compose down"
+          ping 51.250.51.254 -c 5
+          ssh target "touch test_file.file;exit"
+#          ssh target "docker compose down ;exit"
 #          scp ./docker-compose.yaml target:~/
-#          ssh target "RUN_ADDRESS='${{ secrets.RUN_ADDRESS }}' ACCRUAL_SYSTEM_ADDRESS='${{ secrets.ACCRUAL_SYSTEM_ADDRESS }}' DATABASE_DB='${{ secrets.DATABASE_DB }}' DATABASE_USER='${{ secrets.DATABASE_USER }}' DATABASE_PASS='${{ secrets.DATABASE_PASS }}'  DATABASE_URI='${{ secrets.DATABASE_URI }}' docker compose up -d --build --force-recreate"
+#          ssh target "RUN_ADDRESS='${{ secrets.RUN_ADDRESS }}' ACCRUAL_SYSTEM_ADDRESS='${{ secrets.ACCRUAL_SYSTEM_ADDRESS }}' DATABASE_DB='${{ secrets.DATABASE_DB }}' DATABASE_USER='${{ secrets.DATABASE_USER }}' DATABASE_PASS='${{ secrets.DATABASE_PASS }}'  DATABASE_URI='${{ secrets.DATABASE_URI }}' docker compose up -d --build --force-recreate;exit"
 
