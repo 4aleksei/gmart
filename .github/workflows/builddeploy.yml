@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: 'Choose where you want to publish the build'
+        description: 'Choose where you want to publish'
         required: true
         default: AppTester
         type: choice
         options:
-          - MyYandexCloud
+          - MyYandex
 
 concurrency:
   group: main
