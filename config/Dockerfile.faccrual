@@ -1,7 +1,4 @@
-FROM alpine:3.14
-
+FROM ubuntu
 WORKDIR /app
-
 COPY ./faccrual ./
-
-CMD ["/app/faccrual"]
+ENTRYPOINT ["/app/faccrual"]

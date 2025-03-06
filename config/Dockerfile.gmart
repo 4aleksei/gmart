@@ -1,7 +1,4 @@
-FROM alpine:3.14
-
+FROM ubuntu
 WORKDIR /app
-
 COPY ./gophermart ./
-
-CMD ["/app/gophermart"]
+ENTRYPOINT ["/app/gophermart"]
