@@ -34,6 +34,7 @@ var (
 )
 
 func New(l *logger.ZapLogger) *PgStore {
+
 	return &PgStore{l: l}
 }
 
@@ -169,7 +170,7 @@ func (s *PgStore) InsertWithdraw(ctx context.Context, w store.Withdraw) error {
 	}
 	s.l.Logger.Debug("select ", zap.Any("balance", o))
 
-	if o.Accrual < w.Sum {
+	if o.Accrual.Compare(w.Sum) < 0 {
 		return ErrBalanceNotEnough
 	}
 
