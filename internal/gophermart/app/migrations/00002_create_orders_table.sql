@@ -2,8 +2,8 @@
 
 CREATE TYPE  order_status_type AS ENUM (
 'NEW',
-'REGISTERED',
 'PROCESSING',
+'REGISTERED',
 'INVALID',
 'PROCESSED'
 );

@@ -119,7 +119,7 @@ const (
 	                        WHERE user_id = $1 ORDER BY uploaded_at DESC`
 
 	selectOrdersProcessingDefault = `SELECT  order_id, user_id , status ,accrual , uploaded_at, changed_at  FROM orders
-	                                WHERE status='NEW' or status='PROCESSING' or status='REGISTERED' ORDER BY uploaded_at DESC`
+	                                WHERE ( status='NEW' or status='REGISTERED' or status='PROCESSING' ) ORDER BY uploaded_at DESC`
 
 	selectOneOrderDefault = `SELECT  order_id, user_id , status ,accrual , uploaded_at, changed_at  FROM orders
 	                                WHERE order_id = $1`
