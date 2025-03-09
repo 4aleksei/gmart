@@ -20,7 +20,6 @@ import (
 )
 
 func SetupFX() *fx.App {
-
 	app := fx.New(
 		fx.Supply(logger.Config{Level: "debug"}),
 		fx.StopTimeout(1*time.Minute),
@@ -29,21 +28,17 @@ func SetupFX() *fx.App {
 			config.GetConfig,
 			fx.Annotate(pg.New,
 				fx.As(new(service.ServiceStore)), fx.As(new(store.Store))),
-
 			httpclientpool.NewHandler,
 			service.NewService,
 			handlers.NewHTTPServer,
 			accrual.NewAccrual,
 		),
-
 		fx.WithLogger(func(log *logger.ZapLogger) fxevent.Logger {
 			return &fxevent.ZapLogger{Logger: log.Logger}
 		}),
 		fx.Invoke(
 			registerSetLoggerLevel,
-
 			gooseUP,
-
 			registerStorePg,
 			registerHTTPClientPool,
 			registerAccrualClient,

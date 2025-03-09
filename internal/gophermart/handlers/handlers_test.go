@@ -382,7 +382,6 @@ func Test_handlers_mainPagePostOrder(t *testing.T) {
 }
 
 func Test_handlers_mainPageGetOrder(t *testing.T) {
-
 	decimal.MarshalJSONWithoutQuotes = true
 	type want struct {
 		contentType string
@@ -515,7 +514,6 @@ func Test_handlers_mainPageGetOrder(t *testing.T) {
 }
 
 func Test_handlers_mainPageGetBalance(t *testing.T) {
-
 	decimal.MarshalJSONWithoutQuotes = true
 
 	type want struct {
@@ -619,12 +617,10 @@ func Test_handlers_mainPageGetBalance(t *testing.T) {
 				buf, errR := io.ReadAll(body)
 				require.NoError(t, errR)
 				if tt.want.body != "" {
-
 					assert.JSONEq(t, tt.want.body, string(buf))
 				}
 			} else {
 				if tt.want.body != "" {
-
 					assert.JSONEq(t, tt.want.body, respBody)
 				}
 			}
@@ -868,12 +864,10 @@ func Test_handlers_mainPageGetWithdrawals(t *testing.T) {
 				buf, errR := io.ReadAll(body)
 				require.NoError(t, errR)
 				if tt.want.body != "" {
-
 					assert.JSONEq(t, tt.want.body, string(buf))
 				}
 			} else {
 				if tt.want.body != "" {
-
 					assert.JSONEq(t, tt.want.body, respBody)
 				}
 			}

@@ -44,6 +44,10 @@ func migrate(dbURI string, ll *logger.ZapLogger) error {
 		return err
 	}
 
+	if err := goose.DownTo(db, "migrations", 0); err != nil {
+		return err
+	}
+
 	if err := goose.Up(db, "migrations"); err != nil {
 		return err
 	}

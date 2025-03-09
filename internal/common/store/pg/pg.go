@@ -34,7 +34,6 @@ var (
 )
 
 func New(l *logger.ZapLogger) *PgStore {
-
 	return &PgStore{l: l}
 }
 
